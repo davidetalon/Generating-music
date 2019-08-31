@@ -134,7 +134,7 @@ if __name__ == '__main__':
             torch.save(gen.state_dict(), ckp_dir / gen_file_name)
             torch.save(disc.state_dict(), ckp_dir / discr_file_name)
             with torch.no_grad():
-                fake = gen(fixed_noise).detach().numpy()
+                fake = gen(fixed_noise).detach().cpu().numpy()
             scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, np.argmax(fake, axis=1).astype('uint8').T )
 
     #Save all needed parameters
