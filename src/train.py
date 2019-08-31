@@ -111,7 +111,7 @@ if __name__ == '__main__':
             start = time.time()
 
             gen_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
-                batch_sample, adversarial_loss, disc_optimizer, gen_optimizer)
+                batch_sample, adversarial_loss, disc_optimizer, gen_optimizer, device)
 
             # saving metrics
             gen_loss_history.append(gen_loss)

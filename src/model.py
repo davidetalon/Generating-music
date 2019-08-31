@@ -102,7 +102,7 @@ class Discriminative(nn.Module):
 
 
 
-def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer):
+def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device):
 
     
 
@@ -119,15 +119,15 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer):
     disc_optimizer.zero_grad()
 
     # flipped labels and smoothing
-    real = torch.empty((batch_size,1)).uniform_(0, 0.1)
-    fake = torch.empty((batch_size,1)).uniform_(0.9, 1)
+    real = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
+    fake = torch.empty((batch_size,1), device=device).uniform_(0.9, 1)
 
     # noisy labels
-    noisy = torch.empty((batch_size,1)).uniform_(0.9, 1)
+    noisy = torch.empty((batch_size,1), device=device).uniform_(0.9, 1)
     random = torch.rand(*real.shape)
     real = torch.where(random <= 0.05, noisy, real)
 
-    noisy = torch.empty((batch_size,1)).uniform_(0, 0.1)
+    noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
     random = torch.rand(*fake.shape)
     fake = torch.where(random <= 0.05, noisy, fake)
 
@@ -141,7 +141,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer):
     real_loss.backward()
     end = time.time()
 
-    rnd_assgn = torch.randn((batch_size, 1, 256))
+    rnd_assgn = torch.randn((batch_size, 1, 256), device=device)
 
     start = time.time()
     fake_batch = gen(rnd_assgn)
