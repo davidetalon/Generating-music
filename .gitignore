@@ -103,6 +103,12 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# fucking .DS_Store
+*.DS_Store
+
+# idea
+*.code-workspace
+
 # exclude everything from the dataset folder
 dataset/*
 !dataset/.gitkeep 
@@ -113,4 +119,11 @@ metrics/*
 
 # exclude everything from the ckps folder
 ckps/*
-!ckps/.gitkeep 
+!ckps/.gitkeep
+
+# exclude everything from the models folder
+models/*
+!models/.gitkeep
+
+# tempcoderunner
+src/tempCodeRunnerFile.py

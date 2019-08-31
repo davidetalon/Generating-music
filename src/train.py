@@ -2,12 +2,15 @@ import argparse
 import time
 import datetime
 import torch
+import numpy as np
 from dataset import MusicDataset, collate, RandomCrop, OneHotEncoding, ToTensor
 from model import Generative, Discriminative, train_batch, weights_init
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 import json
 from pathlib import Path
+import scipy.io.wavfile
+
 # create the parser
 parser = argparse.ArgumentParser(description='Train the CSP GAN')
 
@@ -51,7 +54,7 @@ if __name__ == '__main__':
                                 ToTensor()
                                 ])
     # load data
-    dataset = MusicDataset("dataset/FMA/dataset_pcm_8000/Rock", transform=trans)
+    dataset = MusicDataset("dataset/FMA/dataset_pcm_8000/Electronic", transform=trans)
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collate(), shuffle=True)
 
@@ -75,8 +78,7 @@ if __name__ == '__main__':
     gen_top_grad = []
     gen_bottom_grad = []
 
-    fixed_noise = torch.randn((args.batch_size, 1, 256))
-    song_list=[]
+    fixed_noise = torch.randn((1, 1, 256))
 
 
     date = datetime.datetime.now()
@@ -85,7 +87,8 @@ if __name__ == '__main__':
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if args.save:
-        (out_dir / args.ckp_dir).mkdir(parents=True, exist_ok=True)
+        ckp_dir = Path(args.ckp_dir)
+        ckp_dir.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(args.num_epochs):
 
@@ -117,16 +120,15 @@ if __name__ == '__main__':
             print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]"
             % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), discr_loss, gen_loss, D_x, D_G_z1, D_G_z2))
 
-            if (epoch % 25 == 0):
-                with torch.no_grad():
-                    fake = gen(fixed_noise).detach().numpy().tolist()
-            song_list.append(fake)
+        if args.save and (epoch % 20 == 0):
+            gen_file_name = 'gen_params'+date+'.pth'
+            discr_file_name = 'discr_params'+date+'.pth'
+            torch.save(gen.state_dict(), out_dir / args.ckp_dir / gen_file_name)
+            torch.save(disc.state_dict(), out_dir / args.ckp_dir / discr_file_name)
+            with torch.no_grad():
+                fake = gen(fixed_noise).detach().numpy()
+            scipy.io.wavfile.write("epoch" + str(epoch) + ".pcm", 16000, np.argmax(fake, axis=1).astype('uint8').T )
 
-            if args.save and (epoch % 20 == 0):
-                gen_file_name = 'gen_params'+date+'.pth'
-                discr_file_name = 'discr_params'+date+'.pth'
-                torch.save(gen.state_dict(), out_dir / args.ckp_dir / gen_file_name)
-                torch.save(disc.state_dict(), out_dir / args.ckp_dir / discr_file_name)
     #Save all needed parameters
     print("Saving parameters")
     # Create output dir
@@ -155,8 +157,7 @@ if __name__ == '__main__':
             'gen_top':gen_top_grad, 
             'gen_bottom':gen_bottom_grad,
             'discr_top':discr_top_grad,
-            'discr_bottom':discr_bottom_grad,
-            'song_list':song_list}
+            'discr_bottom':discr_bottom_grad}
 
     # Save metrics
     metrics_dir = Path(args.metrics_dir)

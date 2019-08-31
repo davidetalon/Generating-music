@@ -60,7 +60,6 @@ class RandomCrop():
         starting_point = np.random.randint(0, self.seq_len - self.subseq_len +1)
         chunk = sample[starting_point:starting_point + self.subseq_len]
 
-        print("After crop shape: ", len(chunk))
         return chunk
 
 def encode_one_hot(sample):
@@ -76,7 +75,6 @@ class OneHotEncoding():
 
         sample = np.array(sample)
         encoded_onehot = encode_one_hot(sample)
-        print("encode_one_hot shape", encoded_onehot.shape)
 
 
         return encoded_onehot
@@ -133,7 +131,6 @@ class ToTensor():
         # Convert songs to tensor
         tensor = torch.tensor(sample).float()
 
-        print("after to tensor:", tensor.shape)
         return tensor
 
 
