@@ -125,5 +125,11 @@ ckps/*
 models/*
 !models/.gitkeep
 
+# exclude everything from the produced folder
+produced/*
+!produced/.gitkeep
+
 # tempcoderunner
 src/tempCodeRunnerFile.py
+
+

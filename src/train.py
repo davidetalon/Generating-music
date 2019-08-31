@@ -24,6 +24,7 @@ parser.add_argument('--num_epochs',             type=int, default=5,    help='Nu
 
 parser.add_argument('--save',             type=bool, default=True,    help='Save the generator and discriminator models')
 parser.add_argument('--out_dir',          type=str, default='models/',    help='Folder where to save the model')
+parser.add_argument('--prod_dir',          type=str, default='produced/',    help='Folder where to save the model')
 parser.add_argument('--ckp_dir',          type=str, default='ckps',    help='Folder where to save the model')
 parser.add_argument('--metrics_dir',          type=str, default='metrics/',    help='Folder where to save the model')
 
@@ -31,6 +32,9 @@ if __name__ == '__main__':
     
     # Parse input arguments
     args = parser.parse_args()
+
+    #%% Check device
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # generative model params
     nz = 1
@@ -41,8 +45,10 @@ if __name__ == '__main__':
   
     # set up the generator network
     gen = Generative(nz, ng, ngf)
+    gen.to(device)
     # set up the discriminative models
     disc = Discriminative(ng, ndf)
+    disc.to(device)
 
     gen.apply(weights_init)
     disc.apply(weights_init)
@@ -54,7 +60,7 @@ if __name__ == '__main__':
                                 ToTensor()
                                 ])
     # load data
-    dataset = MusicDataset("dataset/FMA/dataset_pcm_8000/Electronic", transform=trans)
+    dataset = MusicDataset("dataset/FMA/dataset_pcm_8000/Rock", transform=trans)
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collate(), shuffle=True)
 
@@ -89,6 +95,8 @@ if __name__ == '__main__':
     if args.save:
         ckp_dir = Path(args.ckp_dir)
         ckp_dir.mkdir(parents=True, exist_ok=True)
+        prod_dir = Path(args.prod_dir)
+        prod_dir.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(args.num_epochs):
 
@@ -97,7 +105,7 @@ if __name__ == '__main__':
 
             # moving to device
             # batch = batch_sample.to(device)
-            batch = batch_sample
+            batch = batch_sample.to(device)
 
             # Update network
             start = time.time()
@@ -127,7 +135,7 @@ if __name__ == '__main__':
             torch.save(disc.state_dict(), out_dir / args.ckp_dir / discr_file_name)
             with torch.no_grad():
                 fake = gen(fixed_noise).detach().numpy()
-            scipy.io.wavfile.write("epoch" + str(epoch) + ".pcm", 16000, np.argmax(fake, axis=1).astype('uint8').T )
+            scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, np.argmax(fake, axis=1).astype('uint8').T )
 
     #Save all needed parameters
     print("Saving parameters")
