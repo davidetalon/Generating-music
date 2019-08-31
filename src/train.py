@@ -173,3 +173,4 @@ if __name__ == '__main__':
     metric_file_name = 'metrics'+ date +'.json'
     with open(metrics_dir / metric_file_name, 'w') as f:
         json.dump(metrics, f, indent=4)
+    print("Completed successfully.")
