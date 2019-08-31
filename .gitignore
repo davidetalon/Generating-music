@@ -102,3 +102,15 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# exclude everything from the dataset folder
+dataset/*
+!dataset/.gitkeep 
+
+# exclude everything from the metrics folder
+metrics/*
+!metrics/.gitkeep 
+
+# exclude everything from the ckps folder
+ckps/*
+!ckps/.gitkeep 
