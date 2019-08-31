@@ -18,5 +18,8 @@
 #
 # richiedo gpu
 #$ -q gpu
+# Set the environment
+source /nfsd/compneuro/DATASETS/anaconda/etc/profile.d/conda.sh
+conda activate
 
 bash src/train.sh
