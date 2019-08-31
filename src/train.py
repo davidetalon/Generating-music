@@ -84,7 +84,7 @@ if __name__ == '__main__':
     gen_top_grad = []
     gen_bottom_grad = []
 
-    fixed_noise = torch.randn((1, 1, 256))
+    fixed_noise = torch.randn((1, 1, 256), device=device)
 
 
     date = datetime.datetime.now()
