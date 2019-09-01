@@ -51,8 +51,8 @@ class Generative(nn.Module):
 
             # state size. (ngf) x 32 x 32
             nn.ConvTranspose1d( ngf, ng, 16, 4, 1, bias=True),
-            nn.Tanh()
-            # nn.Softmax(dim=1)
+            # nn.Tanh()
+            nn.Softmax(dim=1)
             # state size. (nc) x 64 x 64
         )
     
@@ -147,7 +147,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     real_loss.backward()
     end = time.time()
 
-    rnd_assgn = torch.randn((batch_size, 1, 80), device=device)
+    rnd_assgn = torch.randn((batch_size, 8, 80), device=device)
 
     start = time.time()
     fake_batch = gen(rnd_assgn)
