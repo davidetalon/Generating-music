@@ -33,15 +33,18 @@ if __name__ == '__main__':
     # Parse input arguments
     args = parser.parse_args()
 
+    # seed
+    torch.manual_seed(args.seed)
+
     #%% Check device
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # generative model params
     nz = 1
-    ngf = 16
+    ngf = 64
     # discriminative model params
-    ng = 256
-    ndf = 16
+    ng = 1
+    ndf = 64
   
     # set up the generator network
     gen = Generative(nz, ng, ngf)
@@ -54,9 +57,9 @@ if __name__ == '__main__':
     disc.apply(weights_init)
 
     seq_len = 16000 * 8
-    subseq_len = 65536
+    subseq_len = 84846
     trans = transforms.Compose([RandomCrop(seq_len, subseq_len),
-                                OneHotEncoding(),
+                                # OneHotEncoding(),
                                 ToTensor()
                                 ])
     # load data
@@ -67,7 +70,8 @@ if __name__ == '__main__':
    
     # test training
     gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
-    disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
+    disc_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
+    # disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
 
     adversarial_loss = torch.nn.BCELoss()
 
@@ -84,7 +88,7 @@ if __name__ == '__main__':
     gen_top_grad = []
     gen_bottom_grad = []
 
-    fixed_noise = torch.randn((1, 1, 256), device=device)
+    fixed_noise = torch.randn((1, 1, 80), device=device)
 
 
     date = datetime.datetime.now()
@@ -106,6 +110,8 @@ if __name__ == '__main__':
             # moving to device
             # batch = batch_sample.to(device)
             batch = batch_sample.to(device)
+
+            batch = torch.unsqueeze(batch, dim=-1)
 
             # Update network
             start = time.time()
@@ -135,7 +141,8 @@ if __name__ == '__main__':
             torch.save(disc.state_dict(), ckp_dir / discr_file_name)
             with torch.no_grad():
                 fake = gen(fixed_noise).detach().cpu().numpy()
-            scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, np.argmax(fake, axis=1).astype('uint8').T )
+                scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
+            # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, np.argmax(fake, axis=1).astype('uint8').T )
 
     #Save all needed parameters
     print("Saving parameters")

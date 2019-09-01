@@ -26,27 +26,33 @@ class Generative(nn.Module):
 
         self.main = nn.Sequential(
 
-            nn.ConvTranspose1d( nz, ngf * 16, 16, stride=4, padding=6, bias=True),
-            nn.ReLU(True),
+            # nn.ConvTranspose1d( nz, ngf * 16, 25, stride=4, padding=6, bias=True),
+            # nn.ReLU(True),
     
-            nn.ConvTranspose1d( ngf*16, ngf * 8, 16, stride=4, padding=6, bias=True),
+            nn.ConvTranspose1d( nz, ngf * 8, 25, stride=4, padding=6, bias=True),
+            nn.BatchNorm1d(ngf * 8),
             nn.ReLU(True),
+            nn.Dropout(0.5),
             # state size. (ngf*8) x 4 x 4
-            nn.ConvTranspose1d(ngf * 8, ngf * 4, 16, 4, 6, bias=True),
-            # nn.BatchNorm1d(ngf * 4),
+            nn.ConvTranspose1d(ngf * 8, ngf * 4, 25, 4, 6, bias=True),
+            nn.BatchNorm1d(ngf * 4),
             nn.ReLU(True),
+            nn.Dropout(0.5),
             # # state size. (ngf*4) x 8 x 8
-            # nn.ConvTranspose1d( ngf * 4, ngf * 2, 16, 4, 6, bias=True),
-            # # nn.BatchNorm1d(ngf * 2),
-            # nn.ReLU(True),
+            nn.ConvTranspose1d( ngf * 4, ngf * 2, 16, 4, 6, bias=True),
+            nn.BatchNorm1d(ngf * 2),
+            nn.ReLU(True),
+            nn.Dropout(0.5),
             # state size. (ngf*2) x 16 x 16
-            nn.ConvTranspose1d( ngf * 4, ng, 16, 4, 6, bias=True),
-            # # nn.BatchNorm1d(ngf),
-            # nn.ReLU(True),
+            nn.ConvTranspose1d( ngf * 2, ngf, 25, 4, 6, bias=True),
+            nn.BatchNorm1d(ngf),
+            nn.ReLU(True),
+            nn.Dropout(0.5),
 
             # state size. (ngf) x 32 x 32
-            # nn.ConvTranspose1d( ngf, ng, 16, 4, 1, bias=True),
-            nn.Softmax(dim=1)
+            nn.ConvTranspose1d( ngf, ng, 16, 4, 1, bias=True),
+            nn.Tanh()
+            # nn.Softmax(dim=1)
             # state size. (nc) x 64 x 64
         )
     
@@ -82,12 +88,12 @@ class Discriminative(nn.Module):
             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 1, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv1d(ndf * 16, 1, 25, 1, 1, bias=True),
+            nn.Conv1d(ndf * 16, 1, 25, 4, 1, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.linear = nn.Sequential(
-            nn.Linear(35, 1),
+            nn.Linear(14, 1),
             nn.Sigmoid()
         )
 
@@ -141,7 +147,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     real_loss.backward()
     end = time.time()
 
-    rnd_assgn = torch.randn((batch_size, 1, 256), device=device)
+    rnd_assgn = torch.randn((batch_size, 1, 80), device=device)
 
     start = time.time()
     fake_batch = gen(rnd_assgn)
