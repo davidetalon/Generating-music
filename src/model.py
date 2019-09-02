@@ -125,15 +125,15 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     disc_optimizer.zero_grad()
 
     # flipped labels and smoothing
-    real = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
-    fake = torch.empty((batch_size,1), device=device).uniform_(0.9, 1.0)
+    real = torch.empty((batch_size,1), device=device).uniform_(0, 0.3)
+    fake = torch.empty((batch_size,1), device=device).uniform_(0.7, 1.2)
 
     # noisy labels
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0.9, 1)
+    noisy = torch.empty((batch_size,1), device=device).uniform_(0.7, 1.2)
     random = torch.rand(*real.shape, device=device)
     real = torch.where(random <= 0.05, noisy, real)
 
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
+    noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.3)
     random = torch.rand(*fake.shape, device=device)
     fake = torch.where(random <= 0.05, noisy, fake)
 
