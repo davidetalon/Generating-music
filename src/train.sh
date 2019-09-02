@@ -3,4 +3,4 @@ python src/train.py \
 --gen_lr=0.0002 \
 --discr_lr=0.0002 \
 --batch_size=16 \
---num_epochs=150 \
+--num_epochs=125 \
