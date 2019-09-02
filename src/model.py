@@ -32,22 +32,22 @@ class Generative(nn.Module):
             nn.ConvTranspose1d( nz, ngf * 8, 25, stride=4, padding=6, bias=True),
             nn.BatchNorm1d(ngf * 8),
             nn.ReLU(True),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
             # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose1d(ngf * 8, ngf * 4, 25, 4, 6, bias=True),
             nn.BatchNorm1d(ngf * 4),
             nn.ReLU(True),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
             # # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose1d( ngf * 4, ngf * 2, 16, 4, 6, bias=True),
             nn.BatchNorm1d(ngf * 2),
             nn.ReLU(True),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose1d( ngf * 2, ngf, 25, 4, 6, bias=True),
             nn.BatchNorm1d(ngf),
             nn.ReLU(True),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
 
             # state size. (ngf) x 32 x 32
             nn.ConvTranspose1d( ngf, ng, 16, 4, 1, bias=True),
@@ -125,17 +125,17 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     disc_optimizer.zero_grad()
 
     # flipped labels and smoothing
-    real = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
-    fake = torch.empty((batch_size,1), device=device).uniform_(0.9, 1)
+    real = torch.empty((batch_size,1), device=device).uniform_(0, 0.3)
+    fake = torch.empty((batch_size,1), device=device).uniform_(0.7, 1.2)
 
     # noisy labels
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0.9, 1)
-    random = torch.rand(*real.shape, device=device)
-    real = torch.where(random <= 0.05, noisy, real)
+    # noisy = torch.empty((batch_size,1), device=device).uniform_(0.9, 1)
+    # random = torch.rand(*real.shape, device=device)
+    # real = torch.where(random <= 0.05, noisy, real)
 
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
-    random = torch.rand(*fake.shape, device=device)
-    fake = torch.where(random <= 0.05, noisy, fake)
+    # noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
+    # random = torch.rand(*fake.shape, device=device)
+    # fake = torch.where(random <= 0.05, noisy, fake)
 
 
     # computing the loss

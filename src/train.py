@@ -70,8 +70,8 @@ if __name__ == '__main__':
    
     # test training
     gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
-    disc_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
-    # disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
+    # disc_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
+    disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
 
     adversarial_loss = torch.nn.BCELoss()
 
@@ -142,7 +142,7 @@ if __name__ == '__main__':
             with torch.no_grad():
                 fake = gen(fixed_noise).detach().cpu().numpy()
                 # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
-                scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, np.argmax(fake, axis=1).astype('uint8').T )
+                scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 8000, np.argmax(fake, axis=1).astype('uint8').T )
 
     #Save all needed parameters
     print("Saving parameters")
