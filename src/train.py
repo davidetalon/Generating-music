@@ -40,7 +40,7 @@ if __name__ == '__main__':
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # generative model params
-    nz = 8
+    nz = 1
     ngf = 64
     # discriminative model params
     ng = 256
@@ -88,7 +88,7 @@ if __name__ == '__main__':
     gen_top_grad = []
     gen_bottom_grad = []
 
-    fixed_noise = torch.randn((1, 8, 80), device=device)
+    fixed_noise = torch.randn((1, 1, 80), device=device)
 
 
     date = datetime.datetime.now()
@@ -142,7 +142,7 @@ if __name__ == '__main__':
             with torch.no_grad():
                 fake = gen(fixed_noise).detach().cpu().numpy()
                 # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
-                scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 8000, np.argmax(fake, axis=1).astype('uint8').T )
+                scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(epoch) + ".wav"), 8000, np.argmax(fake, axis=1).astype('uint8').T )
 
     #Save all needed parameters
     print("Saving parameters")
