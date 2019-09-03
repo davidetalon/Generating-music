@@ -40,7 +40,7 @@ if __name__ == '__main__':
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # generative model params
-    nz = 1
+    nz = 8
     ngf = 64
     # discriminative model params
     ng = 256
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     disc.apply(weights_init)
 
     seq_len = 16000 * 8
-    subseq_len = 84846
+    subseq_len = 81930
     trans = transforms.Compose([RandomCrop(seq_len, subseq_len),
                                 OneHotEncoding(),
                                 ToTensor()
@@ -88,7 +88,7 @@ if __name__ == '__main__':
     gen_top_grad = []
     gen_bottom_grad = []
 
-    fixed_noise = torch.randn((1, 1, 80), device=device)
+    fixed_noise = torch.randn((1, 8, 80), device=device)
 
 
     date = datetime.datetime.now()

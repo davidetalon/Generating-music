@@ -29,11 +29,11 @@ class Generative(nn.Module):
             # nn.ConvTranspose1d( nz, ngf * 16, 25, stride=4, padding=6, bias=True),
             # nn.ReLU(True),
     
-            nn.ConvTranspose1d( nz, ngf * 8, 25, stride=4, padding=6, bias=True),
+            nn.ConvTranspose1d( nz, ngf * 8, 16, stride=4, padding=6, bias=True),
             nn.ReLU(True),
             # nn.Dropout(0.5),
             # state size. (ngf*8) x 4 x 4
-            nn.ConvTranspose1d(ngf * 8, ngf * 4, 25, 4, 6, bias=True),
+            nn.ConvTranspose1d(ngf * 8, ngf * 4, 16, 4, 6, bias=True),
             nn.ReLU(True),
             # nn.Dropout(0.5),
             # # state size. (ngf*4) x 8 x 8
@@ -41,7 +41,7 @@ class Generative(nn.Module):
             nn.ReLU(True),
             # nn.Dropout(0.5),
             # state size. (ngf*2) x 16 x 16
-            nn.ConvTranspose1d( ngf * 2, ngf, 25, 4, 6, bias=True),
+            nn.ConvTranspose1d( ngf * 2, ngf, 16, 4, 6, bias=True),
             nn.ReLU(True),
             # nn.Dropout(0.5),
 
@@ -54,7 +54,6 @@ class Generative(nn.Module):
     
     def forward(self, x):
         x = self.main(x)
-
         return x
         
 
@@ -84,18 +83,17 @@ class Discriminative(nn.Module):
             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 1, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv1d(ndf * 16, 1, 25, 4, 1, bias=True),
+            nn.Conv1d(ndf * 16, 1, 16, 4, 1, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.linear = nn.Sequential(
-            nn.Linear(14, 1),
+            nn.Linear(15, 1),
             nn.Sigmoid()
         )
 
     def forward(self, x):
         x = self.main(x)
-
         x = x.view(x.shape[0], -1)
         x=self.linear(x)
 
@@ -143,7 +141,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     real_loss.backward()
     end = time.time()
 
-    rnd_assgn = torch.randn((batch_size, 1, 80), device=device)
+    rnd_assgn = torch.randn((batch_size, 8, 80), device=device)
 
     start = time.time()
     fake_batch = gen(rnd_assgn)
