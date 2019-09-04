@@ -18,6 +18,7 @@ parser = argparse.ArgumentParser(description='Train the CSP GAN')
 parser.add_argument('--seed',            type=int, default=30,    help=' Seed for the generation process')
 parser.add_argument('--gen_lr',          type=float, default=0.0002,    help=' Generator\'s learning rate')
 parser.add_argument('--discr_lr',        type=float, default=0.0001,    help=' Generator\'s learning rate')
+parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
 
 parser.add_argument('--batch_size',          type=int, default=16,    help='Dimension of the batch')
 parser.add_argument('--num_epochs',             type=int, default=5,    help='Number of epochs')
@@ -40,8 +41,8 @@ if __name__ == '__main__':
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # generative model params
-    nz = 8
-    ngf = 64
+    nz = 1
+    ngf = 32
     # discriminative model params
     ng = 256
     ndf = 64
@@ -88,7 +89,7 @@ if __name__ == '__main__':
     gen_top_grad = []
     gen_bottom_grad = []
 
-    fixed_noise = torch.randn((1, 8, 80), device=device)
+    fixed_noise = torch.randn((1, 1, 80), device=device)
 
 
     date = datetime.datetime.now()

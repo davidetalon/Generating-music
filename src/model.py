@@ -30,20 +30,25 @@ class Generative(nn.Module):
             # nn.ReLU(True),
     
             nn.ConvTranspose1d( nz, ngf * 8, 16, stride=4, padding=6, bias=True),
+            nn.BatchNorm1d(ngf * 8),
             nn.ReLU(True),
+            
             # nn.Dropout(0.5),
             # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose1d(ngf * 8, ngf * 4, 16, 4, 6, bias=True),
+            nn.BatchNorm1d(ngf * 4),
             nn.ReLU(True),
-            # nn.Dropout(0.5),
+
             # # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose1d( ngf * 4, ngf * 2, 16, 4, 6, bias=True),
+            nn.BatchNorm1d(ngf * 2),
             nn.ReLU(True),
-            # nn.Dropout(0.5),
+
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose1d( ngf * 2, ngf, 16, 4, 6, bias=True),
+            nn.BatchNorm1d(ngf),
             nn.ReLU(True),
-            # nn.Dropout(0.5),
+
 
             # state size. (ngf) x 32 x 32
             nn.ConvTranspose1d( ngf, ng, 16, 4, 1, bias=True),
@@ -119,15 +124,15 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     disc_optimizer.zero_grad()
 
     # flipped labels and smoothing
-    real = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
-    fake = torch.empty((batch_size,1), device=device).uniform_(0.9, 1.0)
+    real = torch.empty((batch_size,1), device=device).uniform_(0, 0.3)
+    fake = torch.empty((batch_size,1), device=device).uniform_(0.7, 1.2)
 
     # noisy labels
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0.9, 1.0)
+    noisy = torch.empty((batch_size,1), device=device).uniform_(0.7, 1.2)
     random = torch.rand(*real.shape, device=device)
     real = torch.where(random <= 0.05, noisy, real)
 
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
+    noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.3)
     random = torch.rand(*fake.shape, device=device)
     fake = torch.where(random <= 0.05, noisy, fake)
 
@@ -141,7 +146,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     real_loss.backward()
     end = time.time()
 
-    rnd_assgn = torch.randn((batch_size, 8, 80), device=device)
+    rnd_assgn = torch.randn((batch_size, 1, 80), device=device)
 
     start = time.time()
     fake_batch = gen(rnd_assgn)
