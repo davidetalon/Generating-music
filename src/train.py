@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
     # generative model params
     nz = 1
-    ngf = 32
+    ngf = 64
     # discriminative model params
     ng = 256
     ndf = 64
@@ -79,6 +79,8 @@ if __name__ == '__main__':
     # initializing weights
     print("Start training")
     gen_loss_history = []
+    real_loss_history = []
+    fake_loss_history = []
     discr_loss_history = []
     D_x_history = []
     D_G_z1_history = []
@@ -117,11 +119,13 @@ if __name__ == '__main__':
             # Update network
             start = time.time()
 
-            gen_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
+            gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
                 batch, adversarial_loss, disc_optimizer, gen_optimizer, device)
 
             # saving metrics
             gen_loss_history.append(gen_loss)
+            real_loss_history.append(real_loss)
+            fake_loss_history.append(fake_loss)
             discr_loss_history.append(discr_loss)
             D_x_history.append(D_x)
             D_G_z1_history.append(D_G_z1)
@@ -166,6 +170,8 @@ if __name__ == '__main__':
 
     metrics = {'parameters':vars(args),
             'gen_loss':gen_loss_history, 
+            'real_loss': real_loss_history,
+            'fake_loss':fake_loss_history,
             'discr_loss':discr_loss_history, 
             'D_x':D_x_history, 
             'D_G_z1':D_G_z1_history,

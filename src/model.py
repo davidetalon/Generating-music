@@ -74,18 +74,19 @@ class Discriminative(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf) x 32 x 32
             nn.Conv1d(ndf, ndf * 2, 25, 4, 1, bias=True),
-            # nn.BatchNorm1d(ndf * 2),
+            nn.BatchNorm1d(ndf * 2),
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf*2) x 16 x 16
             nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 1, bias=True),
-            # nn.BatchNorm1d(ndf * 4),
+            nn.BatchNorm1d(ndf * 4),
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf*4) x 8 x 8
             nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 1, bias=True),
-            # nn.BatchNorm1d(ndf * 8),
+            nn.BatchNorm1d(ndf * 8),
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf*8) x 4 x 4
             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 1, bias=True),
+            nn.BatchNorm1d(ndf * 16),
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv1d(ndf * 16, 1, 16, 4, 1, bias=True),
@@ -124,15 +125,15 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     disc_optimizer.zero_grad()
 
     # flipped labels and smoothing
-    real = torch.empty((batch_size,1), device=device).uniform_(0, 0.3)
-    fake = torch.empty((batch_size,1), device=device).uniform_(0.7, 1.2)
+    real = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
+    fake = torch.empty((batch_size,1), device=device).uniform_(0.9, 1.0)
 
     # noisy labels
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0.7, 1.2)
+    noisy = torch.empty((batch_size,1), device=device).uniform_(0.9, 1.0)
     random = torch.rand(*real.shape, device=device)
     real = torch.where(random <= 0.05, noisy, real)
 
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.3)
+    noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
     random = torch.rand(*fake.shape, device=device)
     fake = torch.where(random <= 0.05, noisy, fake)
 
@@ -186,7 +187,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
 
     gen_optimizer.step()
 
-    return gen_loss.item(), disc_loss.item(), D_x, D_G_z1, D_G_z2, disc_top.item(), disc_bottom.item(), gen_top.item(), gen_bottom.item()
+    return gen_loss.item(), real_loss.item(), fake_loss.item(), disc_loss.item(), D_x, D_G_z1, D_G_z2, disc_top.item(), disc_bottom.item(), gen_top.item(), gen_bottom.item()
 
 if __name__=='__main__':
 
