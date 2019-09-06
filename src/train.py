@@ -29,6 +29,9 @@ parser.add_argument('--prod_dir',          type=str, default='produced/',    hel
 parser.add_argument('--ckp_dir',          type=str, default='ckps',    help='Folder where to save the model')
 parser.add_argument('--metrics_dir',          type=str, default='metrics/',    help='Folder where to save the model')
 
+parser.add_argument('--model_path',          type=str, default='',    help='Path to models to restore')
+
+
 if __name__ == '__main__':
     
     # Parse input arguments
@@ -42,7 +45,7 @@ if __name__ == '__main__':
 
     # generative model params
     nz = 1
-    ngf = 64
+    ngf = 32
     # discriminative model params
     ng = 256
     ndf = 64
@@ -68,6 +71,12 @@ if __name__ == '__main__':
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collate(), shuffle=True)
 
+    if args.model_path != '':
+        print("Loading the model")
+        disc_path = "models/discr_params" + args.model_path + ".pth"
+        gen_path = "models/gen_params" + args.model_path + ".pth"
+        gen.load_state_dict(torch.load(gen_path, map_location=device))
+        disc.load_state_dict(torch.load(disc_path, map_location=device))
    
     # test training
     gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
