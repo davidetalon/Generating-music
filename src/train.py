@@ -116,7 +116,7 @@ if __name__ == '__main__':
         prod_dir = Path(args.prod_dir)
         prod_dir.mkdir(parents=True, exist_ok=True)
 
-    replay_memory = torch.empty((args.batch_size, ng, subseq_len))
+    replay_memory = torch.empty((args.batch_size, ng, subseq_len), device=device)
     for epoch in range(args.num_epochs):
 
         # Iterate batches
