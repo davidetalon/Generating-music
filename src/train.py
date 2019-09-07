@@ -101,6 +101,7 @@ if __name__ == '__main__':
     gen_top_grad = []
     gen_bottom_grad = []
 
+
     fixed_noise = torch.randn((1, 1, 100), device=device)
 
 
@@ -115,10 +116,14 @@ if __name__ == '__main__':
         prod_dir = Path(args.prod_dir)
         prod_dir.mkdir(parents=True, exist_ok=True)
 
+    replay_memory = torch.empty((args.batch_size, ng, subseq_len))
     for epoch in range(args.num_epochs):
 
         # Iterate batches
         for i, batch_sample in enumerate(dataloader):
+
+            iteration = epoch * len(dataloader) + i
+
 
             # moving to device
             # batch = batch_sample.to(device)
@@ -130,7 +135,7 @@ if __name__ == '__main__':
             start = time.time()
 
             gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
-                batch, adversarial_loss, disc_optimizer, gen_optimizer, device)
+                batch, adversarial_loss, disc_optimizer, gen_optimizer, device, iteration, replay_memory)
 
             # saving metrics
             gen_loss_history.append(gen_loss)
