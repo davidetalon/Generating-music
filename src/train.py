@@ -3,13 +3,14 @@ import time
 import datetime
 import torch
 import numpy as np
-from dataset import MusicDataset, collate, RandomCrop, OneHotEncoding, ToTensor
+from dataset import MusicDataset, collate, RandomCrop, OneHotEncoding, ToTensor, Crop_and_pad
 from model import Generative, Discriminative, train_batch, weights_init
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 import json
 from pathlib import Path
 import scipy.io.wavfile
+
 
 # create the parser
 parser = argparse.ArgumentParser(description='Train the CSP GAN')
@@ -47,8 +48,8 @@ if __name__ == '__main__':
     nz = 1
     ngf = 32
     # discriminative model params
-    ng = 256
-    ndf = 64
+    ng = 1
+    ndf = 32
   
     # set up the generator network
     gen = Generative(nz, ng, ngf)
@@ -61,13 +62,13 @@ if __name__ == '__main__':
     disc.apply(weights_init)
 
     seq_len = 16000 * 8
-    subseq_len = 81930
-    trans = transforms.Compose([RandomCrop(seq_len, subseq_len),
-                                OneHotEncoding(),
+    subseq_len = 16384
+    trans = transforms.Compose([Crop_and_pad(subseq_len),
+                                # OneHotEncoding(),
                                 ToTensor()
                                 ])
     # load data
-    dataset = MusicDataset("dataset/FMA/dataset_pcm_8000/Rock", transform=trans)
+    dataset = MusicDataset("dataset/words_f32le", transform=trans)
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collate(), shuffle=True)
 
@@ -100,7 +101,7 @@ if __name__ == '__main__':
     gen_top_grad = []
     gen_bottom_grad = []
 
-    fixed_noise = torch.randn((1, 1, 80), device=device)
+    fixed_noise = torch.randn((1, 1, 100), device=device)
 
 
     date = datetime.datetime.now()
@@ -156,7 +157,7 @@ if __name__ == '__main__':
             with torch.no_grad():
                 fake = gen(fixed_noise).detach().cpu().numpy()
                 # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
-                scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(epoch) + ".wav"), 8000, np.argmax(fake, axis=1).astype('uint8').T )
+                scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(epoch) + ".wav"), 16000, fake.T )
 
     #Save all needed parameters
     print("Saving parameters")

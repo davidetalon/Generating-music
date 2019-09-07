@@ -7,6 +7,9 @@ import os
 from pathlib import Path
 import numpy as np
 from torchvision import transforms
+import scipy
+import math
+
 
 
 class MusicDataset(Dataset):
@@ -15,7 +18,7 @@ class MusicDataset(Dataset):
 
         source_folder = Path(source_filepath)
 
-        # get songs' path and keep it in two different arrays
+        # get songs' path
         songs = []
         for root, dirs, files in os.walk(source_folder):
             for name in files:
@@ -45,11 +48,13 @@ class MusicDataset(Dataset):
         return sample
 
 def song_loader(path):
-    song = np.memmap(path, dtype="int8", mode='r')
+    # song = np.memmap(path, dtype="int8", mode='r')
+
+    sampling_rate, song = scipy.io.wavfile.read(path, mmap=False)
+
     return song.tolist()
 
-# TODO: split dataset into same-length chunks to have a better management,
-# deal with the last segment that have lower size -> variable size sequences
+
 class RandomCrop():
     def __init__(self, seq_len, subseq_len):
         self.seq_len = seq_len
@@ -61,6 +66,33 @@ class RandomCrop():
         chunk = sample[starting_point:starting_point + self.subseq_len]
 
         return chunk
+
+class Crop_and_pad():
+    def __init__(self, target_len):
+        self.target_len = target_len
+
+    def __call__(self, sample):
+
+        sample_len = len(sample)
+        mid_point = sample_len // 2
+ 
+        if(sample_len > self.target_len):
+
+            # center crop
+            start = mid_point - (self.sample_len//2)
+            chunk = sample[start:start + self.target_len]
+        elif(sample_len < self.target_len):
+
+            # zero padding to target
+            start = (self.target_len - sample_len)//2
+            end = int(math.ceil((self.target_len - sample_len)/2))
+            # print(start, end)
+            chunk = np.array(sample)
+            chunk = np.pad(chunk, (start, end), 'constant')
+
+        # print(chunk)
+        return chunk
+
 
 def encode_one_hot(sample):
     encoded = np.zeros((sample.shape[0], 256))
@@ -130,6 +162,7 @@ class ToTensor():
     def __call__(self, sample):
         # Convert songs to tensor
         tensor = torch.tensor(sample).float()
+        
 
         return tensor
 
