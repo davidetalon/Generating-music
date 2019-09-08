@@ -11,9 +11,8 @@ import random
 
 class ReplayMemory(object):
 
-    def __init__(self, capacity = 512, batch_size=64):
+    def __init__(self, capacity = 512):
         self.capacity = capacity
-        self.batch_size = batch_size
 
         self.memory = []
         self.position = 0
@@ -22,14 +21,13 @@ class ReplayMemory(object):
         split = torch.split(batch, 1, dim=0)
         if len(self.memory) < self.capacity:
             self.memory.append(None)
-        self.memory[self.position:self.position+self.batch_size] = batch
-        self.position = (self.position + self.batch_size) % self.capacity
+        self.memory[self.position:self.position+batch.shape[0]] = split
+        self.position = (self.position + batch.shape[0]) % self.capacity
 
-    def sample(self):
-        sampled = random.sample(self.memory, self.batch_size)
+    def sample(self, batch_size):
+        sampled = random.sample(self.memory, batch_size)
         concatenated = torch.cat(sampled, dim=0)
-        concatenated = torch.unsqueeze(concatenated, dim=1)
-        print(concatenated.shape)
+        # concatenated = torch.unsqueeze(concatenated, dim=1)
         return concatenated
 
 def weights_init(m):
@@ -87,7 +85,7 @@ class Generative(nn.Module):
         x = x.view(x.shape[0], 16 * self.ngf, 16)
         x = nn.ReLU()(x)
         x = self.main(x)
-        
+
         return x
         
 
@@ -184,11 +182,10 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
 
     # adding to replay memory
     replay_memory.push(fake_batch.detach())
-    experience = replay_memory.sample()
+    experience = replay_memory.sample(batch_size)
 
 
     output = disc(experience)
-
     fake_loss = loss_fn(output, fake)
     start = time.time()
     fake_loss.backward()
