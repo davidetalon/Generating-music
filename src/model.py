@@ -56,21 +56,21 @@ class Generative(nn.Module):
 
             nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(True),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
             # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(True),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
 
             # # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(True),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
 
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(True),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
 
             # state size. (ngf) x 32 x 32
             nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
