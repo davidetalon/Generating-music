@@ -88,7 +88,7 @@ class Crop_and_pad():
             end = int(math.ceil((self.target_len - sample_len)/2))
             # print(start, end)
             chunk = np.array(sample)
-            chunk = np.pad(chunk, (start, end), 'constant')
+            chunk = np.pad(chunk, (start, end), 'linear_ramp')
 
         # print(chunk)
         return chunk

@@ -4,7 +4,7 @@ import datetime
 import torch
 import numpy as np
 from dataset import MusicDataset, collate, RandomCrop, OneHotEncoding, ToTensor, Crop_and_pad
-from model import Generative, Discriminative, train_batch, weights_init
+from model import Generative, Discriminative, train_batch, weights_init, ReplayMemory
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 import json
@@ -116,14 +116,12 @@ if __name__ == '__main__':
         prod_dir = Path(args.prod_dir)
         prod_dir.mkdir(parents=True, exist_ok=True)
 
-    replay_memory = torch.empty((args.batch_size, ng, subseq_len), device=device)
+    # replay_memory = torch.empty((args.batch_size, ng, subseq_len), device=device)
+    replay_memory = ReplayMemory(capacity=512, batch_size=args.batch_size)
     for epoch in range(args.num_epochs):
 
         # Iterate batches
         for i, batch_sample in enumerate(dataloader):
-
-            iteration = epoch * len(dataloader) + i
-
 
             # moving to device
             # batch = batch_sample.to(device)
@@ -135,7 +133,7 @@ if __name__ == '__main__':
             start = time.time()
 
             gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
-                batch, adversarial_loss, disc_optimizer, gen_optimizer, device, iteration, replay_memory)
+                batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
 
             # saving metrics
             gen_loss_history.append(gen_loss)

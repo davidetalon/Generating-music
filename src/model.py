@@ -4,8 +4,33 @@ from torch import nn
 import numpy as np
 import time
 import torch
-from random import randint
+# from random import randint
+import random
 
+
+
+class ReplayMemory(object):
+
+    def __init__(self, capacity = 512, batch_size=64):
+        self.capacity = capacity
+        self.batch_size = batch_size
+
+        self.memory = []
+        self.position = 0
+
+    def push(self, batch):
+        split = torch.split(batch, 1, dim=0)
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position:self.position+self.batch_size] = batch
+        self.position = (self.position + self.batch_size) % self.capacity
+
+    def sample(self):
+        sampled = random.sample(self.memory, self.batch_size)
+        concatenated = torch.cat(sampled, dim=0)
+        concatenated = torch.unsqueeze(concatenated, dim=1)
+        print(concatenated.shape)
+        return concatenated
 
 def weights_init(m):
     """
@@ -37,17 +62,17 @@ class Generative(nn.Module):
             # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(True),
-            nn.Dropout(True),
+            nn.Dropout(0.5),
 
             # # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(True),
-            nn.Dropout(True),
+            nn.Dropout(0.5),
 
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(True),
-            nn.Dropout(True),
+            nn.Dropout(0.5),
 
             # state size. (ngf) x 32 x 32
             nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
@@ -62,7 +87,7 @@ class Generative(nn.Module):
         x = x.view(x.shape[0], 16 * self.ngf, 16)
         x = nn.ReLU()(x)
         x = self.main(x)
-
+        
         return x
         
 
@@ -90,8 +115,6 @@ class Discriminative(nn.Module):
             # state size. (ndf*8) x 4 x 4
             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
-
-
         )
 
         self.linear = nn.Sequential(
@@ -110,7 +133,7 @@ class Discriminative(nn.Module):
 
 
 
-def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device, iteration, replay_memory):
+def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device, replay_memory):
 
     
     # (seq_len, batch_ize)
@@ -160,19 +183,11 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     end = time.time()
 
     # adding to replay memory
-    if iteration == 0:
-        replay_memory = fake_batch.detach()
-    else:
-        iter_samples = 2
-        mantained = torch.narrow(replay_memory, 0, iter_samples, batch_size - iter_samples)
-        print(mantained.shape)
-        first_sample = fake_batch[randint(0,batch_size-1)].detach()
-        second_sample = fake_batch[randint(0, batch_size-1)].detach()
-        print(first_sample.shape, second_sample.shape)
-        replay_memory = torch.cat((mantained, torch.unsqueeze(first_sample, 1), torch.unsqueeze(second_sample, 1)), 0)
-        print(replay_memory.shape)
+    replay_memory.push(fake_batch.detach())
+    experience = replay_memory.sample()
 
-    output = disc(replay_memory)
+
+    output = disc(experience)
 
     fake_loss = loss_fn(output, fake)
     start = time.time()
@@ -198,11 +213,12 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
 
     output = disc(fake_batch)
     gen_loss = loss_fn(output, real)
-    
+
+
     D_G_z2 = output.mean().item()
     gen_loss.backward()
 
-    gen_top = gen.main[0].weight.grad.norm()
+    gen_top = gen.linear.weight.grad.norm()
     gen_bottom = gen.main[-2].weight.grad.norm()
 
     gen_optimizer.step()
