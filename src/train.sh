@@ -4,5 +4,5 @@ python src/train.py \
 --discr_lr=0.0002 \
 --batch_size=64 \
 --num_epochs=500 \
---notes='differentnoise=0.9/latentspace=1/ngf=32/dropout/batch=64' \
+--notes='differentnoise=0.9/latentspace=1/ngf=64/dropout/batch=64/dcgan/nonoisylabels' \
 # --model_path='05-09-2019,16-35-12' \

@@ -46,10 +46,10 @@ if __name__ == '__main__':
 
     # generative model params
     nz = 1
-    ngf = 32
+    ngf = 64
     # discriminative model params
     ng = 1
-    ndf = 32
+    ndf = 64
   
     # set up the generator network
     gen = Generative(nz, ng, ngf)

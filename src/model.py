@@ -55,21 +55,25 @@ class Generative(nn.Module):
         self.main = nn.Sequential(
 
             nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.ReLU(True),
+            nn.BatchNorm1d(ngf * 8),
+            nn.ReLU(inplace=True),
             # nn.Dropout(0.5),
             # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.ReLU(True),
+            nn.BatchNorm1d(ngf * 4),
+            nn.ReLU(inplace=True),
             # nn.Dropout(0.5),
 
             # # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.ReLU(True),
+            nn.BatchNorm1d(ngf * 2),
+            nn.ReLU(inplace=True),
             # nn.Dropout(0.5),
 
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.ReLU(True),
+            nn.BatchNorm1d(ngf),
+            nn.ReLU(inplace=True),
             # nn.Dropout(0.5),
 
             # state size. (ngf) x 32 x 32
@@ -100,18 +104,23 @@ class Discriminative(nn.Module):
         self.main = nn.Sequential(
 
             nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
+            nn.BatchNorm1d(ndf),
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True),
+            nn.BatchNorm1d(ndf * 2),
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True),
+            nn.BatchNorm1d(ndf * 4),
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
+            nn.BatchNorm1d(ndf * 8),
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf*8) x 4 x 4
             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
+            nn.BatchNorm1d(ndf * 16),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
@@ -157,13 +166,13 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     fake = torch.empty((batch_size,1), device=device).uniform_(0.9, 1.0)
 
     # noisy labels
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0.9, 1.0)
-    random = torch.rand(*real.shape, device=device)
-    real = torch.where(random <= 0.05, noisy, real)
+    # noisy = torch.empty((batch_size,1), device=device).uniform_(0.9, 1.0)
+    # random = torch.rand(*real.shape, device=device)
+    # real = torch.where(random <= 0.05, noisy, real)
 
-    noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
-    random = torch.rand(*fake.shape, device=device)
-    fake = torch.where(random <= 0.05, noisy, fake)
+    # noisy = torch.empty((batch_size,1), device=device).uniform_(0, 0.1)
+    # random = torch.rand(*fake.shape, device=device)
+    # fake = torch.where(random <= 0.05, noisy, fake)
 
 
     # computing the loss
