@@ -80,9 +80,11 @@ if __name__ == '__main__':
         disc.load_state_dict(torch.load(disc_path, map_location=device))
    
     # test training
-    gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
+    gen_optimizer = torch.optim.RMSprop(gen.parameters(), lr=5e-5)
+    disc_optimizer = torch.optim.RMSprop(disc.parameters(), lr=5e-5)
+    # gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
     # disc_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
-    disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
+    # disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
 
     adversarial_loss = torch.nn.BCELoss()
 
@@ -121,32 +123,116 @@ if __name__ == '__main__':
     for epoch in range(args.num_epochs):
 
         # Iterate batches
-        for i, batch_sample in enumerate(dataloader):
+        # for i, batch_sample in enumerate(dataloader):
 
+        start = time.time()
+        data_iter = iter(dataloader)
+        i=0
+        while i < len(dataloader):
             # moving to device
             # batch = batch_sample.to(device)
-            batch = batch_sample.to(device)
 
-            # batch = torch.unsqueeze(batch, dim=-1)
+            for p in disc.parameters(): # reset requires_grad
+                p.requires_grad = True
 
-            # Update network
-            start = time.time()
+            j = 0
+            while j < 5 and i < len(dataloader):
+                j += 1
 
-            gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
-                batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
+                for p in disc.parameters():
+                    p.data.clamp_(-0.01, 0.01)
+
+                batch_sample = data_iter.next()
+                i += 1
+
+                batch = batch_sample.to(device)
+
+
+                # (batch_size, seq_len)
+                batch = torch.transpose(batch, 0, 1)
+                # (batch_size, channels, seq_len)
+                batch = torch.unsqueeze(batch, dim=1)
+                # batch = torch.transpose(batch, 1, 2)
+
+                batch_size = batch.shape[0]
+                # print(target_real_data.shape)
+                
+                ############################
+                # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+                ###########################
+                disc_optimizer.zero_grad()
+
+                # flipped labels and smoothing
+                real = torch.ones((batch_size,1), device=device)
+                fake = -torch.ones((batch_size,1), device=device)
+
+                # computing the loss
+                output = disc(batch)
+                D_real = output
+                D_real.backward(real)
+
+                D_x = output.mean().item()
+  
+                # generating the fake_batch
+                rnd_assgn = torch.randn((batch_size, 1, 100), device=device)
+                fake_batch = gen(rnd_assgn)
+
+                # adding to replay memory
+                replay_memory.push(fake_batch.detach())
+                experience = replay_memory.sample(batch_size)
+
+
+                output = disc(experience)
+                D_fake = output
+                D_fake.backward(fake)
+                D_G_z1 = output.mean().item()
+
+                disc_top = disc.main[0].weight.grad.norm()
+                disc_bottom = disc.linear[-1].weight.grad.norm()
+
+                # disc_loss = (real_loss + fake_loss)/
+                real_loss = torch.mean(D_real)
+                fake_loss = torch.mean(D_fake)
+                discr_loss = -(real_loss - fake_loss)
+
+                disc_optimizer.step()
+
+            discr_top = disc.main[0].weight.grad.norm()
+            discr_bottom = disc.linear[-1].weight.grad.norm()
+
+            ############################
+            # (2) Update G network: maximize log(D(G(z)))
+            ###########################
+            # for p in disc.parameters():
+            #     p.requires_grad = False # to avoid computation
+            gen_optimizer.zero_grad()
+
+
+            output = disc(fake_batch)
+            # gen_loss = loss_fn(output, real)
+            gen_loss = -torch.mean(output)
+
+
+            D_G_z2 = output.mean().item()
+            gen_loss.backward(real)
+
+            gen_top = gen.linear.weight.grad.norm()
+            gen_bottom = gen.main[-2].weight.grad.norm()
+
+            gen_optimizer.step()
 
             # saving metrics
-            gen_loss_history.append(gen_loss)
-            real_loss_history.append(real_loss)
-            fake_loss_history.append(fake_loss)
-            discr_loss_history.append(discr_loss)
+            gen_loss_history.append(gen_loss.item())
+            real_loss_history.append(real_loss.item())
+            fake_loss_history.append(fake_loss.item())
+            discr_loss_history.append(discr_loss.item())
             D_x_history.append(D_x)
             D_G_z1_history.append(D_G_z1)
             D_G_z2_history.append(D_G_z1)
-            discr_top_grad.append(discr_top)
-            discr_bottom_grad.append(discr_bottom)
-            gen_top_grad.append(gen_top)
-            gen_bottom_grad.append(gen_bottom)
+            discr_top_grad.append(discr_top.item())
+            discr_bottom_grad.append(discr_bottom.item())
+            gen_top_grad.append(gen_top.item())
+            gen_bottom_grad.append(gen_bottom.item())
 
             end = time.time()
             print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]"

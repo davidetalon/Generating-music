@@ -125,8 +125,7 @@ class Discriminative(nn.Module):
         )
 
         self.linear = nn.Sequential(
-            nn.Linear(256 * self.ndf, 1),
-            nn.Sigmoid()
+            nn.Linear(256 * self.ndf, 1)
         )
 
     def forward(self, x):
