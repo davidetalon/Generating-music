@@ -164,7 +164,7 @@ if __name__ == '__main__':
 
                 # flipped labels and smoothing
                 real = torch.ones((batch_size,1), device=device)
-                fake = -torch.ones((batch_size,1), device=device)
+                fake = -1 * torch.ones((batch_size,1), device=device)
 
                 # computing the loss
                 output = disc(batch)
@@ -178,9 +178,9 @@ if __name__ == '__main__':
                 fake_batch = gen(rnd_assgn)
 
                 # adding to replay memory
-                replay_memory.push(fake_batch.detach())
-                experience = replay_memory.sample(batch_size)
-
+                # replay_memory.push(fake_batch.detach())
+                # experience = replay_memory.sample(batch_size)
+                experience = fake_batch.detach()
 
                 output = disc(experience)
                 D_fake = output
@@ -193,7 +193,7 @@ if __name__ == '__main__':
                 # disc_loss = (real_loss + fake_loss)/
                 real_loss = torch.mean(D_real)
                 fake_loss = torch.mean(D_fake)
-                discr_loss = -(real_loss - fake_loss)
+                discr_loss = real_loss - fake_loss
 
                 disc_optimizer.step()
 
