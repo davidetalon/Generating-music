@@ -130,8 +130,8 @@ class Discriminative(nn.Module):
 
     def forward(self, x):
         x = self.main(x)
-
-        x = x.view(x.shape[0], 256 * self.ndf)
+        print(x.shape)
+        x = x.view(x.shape[0], 256 * self.ndf )
         x = self.linear(x)
 
         return x
@@ -142,15 +142,9 @@ class Discriminative(nn.Module):
 def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device, replay_memory):
 
     
-    # (seq_len, batch_ize)
-    # adding channel dimension
-    
-
-    # (batch_size, seq_len)
+    # (batch_size, channel, seq_len)
     batch = torch.transpose(batch, 0, 1)
-    # (batch_size, channels, seq_len)
-    batch = torch.unsqueeze(batch, dim=1)
-    # batch = torch.transpose(batch, 1, 2)
+    batch = torch.transpose(batch, 1, 2)
 
     batch_size = batch.shape[0]
     # print(target_real_data.shape)
@@ -232,7 +226,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
 
 if __name__=='__main__':
 
-    from dataset import MusicDataset, ToTensor, collate, RandomCrop, OneHotEncoding
+    from dataset import MusicDataset, ToTensor, collate, ToMulaw, OneHotEncoding
     from torch.utils.data import Dataset, DataLoader
     import torch
     from torchvision import transforms
@@ -243,23 +237,36 @@ if __name__=='__main__':
 
     # discriminative model params
     ng = 256
-    ndf = 16
+    ndf = 64
+
+    # Check device
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
   
     # set up the generator network
     gen = Generative(nz, ng, ngf)
+    gen.to(device)
     # set up the discriminative models
     disc = Discriminative(ng, ndf)
+    disc.to(device)
 
 
-    seq_len = 16000 * 8
-    subseq_len = 65536
-    trans = transforms.Compose([RandomCrop(seq_len, subseq_len),
-                                OneHotEncoding(),
-                                ToTensor()
+    seq_len = 16000 * 5
+    normalize = True
+    # trans = ToMulaw()
+
+    # subseq_len = 65536
+    trans = transforms.Compose([ToMulaw(),
+                                OneHotEncoding()
                                 ])
+
+    
     # load data
-    dataset = MusicDataset("dataset/FMA/dataset_pcm_8000/Rock", transform=trans)
-    dataloader = DataLoader(dataset, batch_size=1, collate_fn=collate(), shuffle=True)
+    dataset = MusicDataset("/Users/davidetalon/Desktop/Dev/Generating-music/dataset/maestro_mono",
+                                                        seq_len = seq_len,
+                                                        normalize = normalize,
+                                                        transform=trans)
+                        
+    dataloader = DataLoader(dataset, batch_size=5, collate_fn=collate(), shuffle=True)
 
     # test training
     gen_optimizer = torch.optim.Adam(gen.parameters())
@@ -268,9 +275,12 @@ if __name__=='__main__':
     adversarial_loss = torch.nn.BCELoss()
 
     # Test the network output
+    replay_memory = ReplayMemory(capacity=512)
+
     for i, batch_sample in enumerate(dataloader):
 
-        train_batch(gen, disc, batch_sample, adversarial_loss, disc_optimizer, gen_optimizer)
+        batch = batch_sample.to(device)
+        gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
 
         if i == 3:
             break

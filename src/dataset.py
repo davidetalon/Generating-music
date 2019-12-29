@@ -3,69 +3,108 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
+import torchaudio
 import os
+from torchvision import transforms
 from pathlib import Path
 import numpy as np
-from torchvision import transforms
 import scipy
 import math
+import time
 
 
 
 class MusicDataset(Dataset):
 
-    def __init__(self, source_filepath, transform = None):
+    def __init__(self, source_filepath, seq_len=512, normalize=True, transform = None):
 
         source_folder = Path(source_filepath)
-
+        print(source_folder)
+        self.seq_len = seq_len
         # get songs' path
         songs = []
         for root, dirs, files in os.walk(source_folder):
             for name in files:
                 songs.append(os.path.join(root, name))
+        
+        # let's restrict to wav files (damn .DS_Store)
+        songs = [song for song in songs if song.endswith('.wav')]
 
+
+
+        # self.transform = transform
+        # self.songs = songs
+
+        # we cannot waste songs - let's analyze the entire dataset and divide songs into chunks
+        # each chunk will be a sample - notice that we could need to load multiple times the same file
+
+        # notice that each song could have different number of chunks, let's save path and idx of chunk
+        dataset_chunks = []
+
+        for song in songs:
+
+            data = torchaudio.info(song)
+            # get the number of chunks in the audio file
+            n_chunks = int((data[0].length/data[0].channels)/self.seq_len)
+
+            # for each audiofile save the chunks - easy to retrieve
+            for idx in range(n_chunks):
+                dataset_chunks.append({"path":song, "idx":idx})
+
+        self.dataset_chunks = dataset_chunks
 
         self.transform = transform
-        self.songs = songs
         
     def __len__(self):
 
         # we are working with unpaired songs, we could have different sizes
-        return len(self.songs)
+        return len(self.dataset_chunks)
+
+    def song_loader(self, chunk_info, normalize=True):
+        # song = np.memmap(path, dtype="int8", mode='r')
+
+        # sampling_rate, song = scipy.io.wavfile.read(path, mmap=False)
+
+        # data is loaded as a tensor
+        song, _ = torchaudio.load(chunk_info['path'], normalization=normalize, num_frames=self.seq_len, offset=self.seq_len*chunk_info['idx'])
+
+        return song
 
     def __getitem__(self, idx):
         
-        song_path = self.songs[idx % len(self.songs)]
-       
-        # load songs as pulse code modulation
-        song = song_loader(song_path)
+        
+        chunk_info = self.dataset_chunks[idx % len(self.dataset_chunks)]
+        # load the song
+        sample = self.song_loader(chunk_info)
 
-        sample = song
+        # # get the selected chunk
+        # chunks = torch.split(song, self.seq_len, dim=-1)
+        
+        # # print(song_path['idx'])
+        # sample = chunks[song_path['idx']]
 
         if self.transform:
             sample = self.transform(sample)
 
         return sample
 
-def song_loader(path):
-    # song = np.memmap(path, dtype="int8", mode='r')
+class Normalize():
 
-    sampling_rate, song = scipy.io.wavfile.read(path, mmap=False)
+    def __call__(self, sample):
+        sample = sample - sample.mean()
+        sample = sample / sample.abs().max()
 
-    return song.tolist()
+        return sample
 
-
-class RandomCrop():
-    def __init__(self, seq_len, subseq_len):
+class ToChunks():
+    def __init__(self, seq_len):
         self.seq_len = seq_len
-        self.subseq_len = subseq_len
 
     def __call__(self, sample):
 
-        starting_point = np.random.randint(0, self.seq_len - self.subseq_len +1)
-        chunk = sample[starting_point:starting_point + self.subseq_len]
+        chunks = torch.split(sample, self.seq_len)
 
-        return chunk
+        return chunks
 
 class Crop_and_pad():
     def __init__(self, target_len):
@@ -95,9 +134,10 @@ class Crop_and_pad():
 
 
 def encode_one_hot(sample):
-    encoded = np.zeros((sample.shape[0], 256))
+    sample = torch.squeeze(sample)
+    encoded = torch.zeros((sample.shape[0], 256))
     for i in range(sample.shape[0]):
-        encoded[i, sample[i] + 127] = 1
+        encoded[i, int(sample[i])] = 1
     return encoded
 
 class OneHotEncoding():
@@ -105,58 +145,19 @@ class OneHotEncoding():
     # set to 1 the element associated to the indicated value: value + 127.
     def __call__(self, sample):
 
-        sample = np.array(sample)
         encoded_onehot = encode_one_hot(sample)
-
 
         return encoded_onehot
 
-# class Crop():
-#     def __init__(self, seq_len, subseq_len):
-#         self.seq_len = seq_len
-#         self.subseq_len = subseq_len
+class ToMulaw():
 
-#     def __call__(self, sample):
-#         source = sample['source']
-#         target = sample['target']
+    def __call__(self, sample):
 
 
-#         # chunking source 
-#         n_seq = len(source) // self.seq_len
-#         n_subseq = self.seq_len // self.subseq_len
-#         chunked_source = np.zeros((n_seq, n_subseq, self.subseq_len))
-
-#         for seq in range(n_seq):
-#             for subseq in range(n_subseq):
-#                 startpoint = seq * self.seq_len + subseq * self.subseq_len
-#                 endpoint = seq * self.seq_len + (subseq + 1) * self.subseq_len
-
-#                 # sequence length not divisible by subseq length
-#                 # if (endpoint > len(source)):
-#                 #     endpoint = len(source)
-
-#                 chunked_source[seq, subseq, :] = source[startpoint:endpoint]
-#         # chunking target
-#         n_seq = len(target) // self.seq_len
-#         n_subseq = self.seq_len // self.subseq_len
-
-#         chunked_target = np.zeros((n_seq, n_subseq, self.subseq_len))
-
-#         for seq in range(n_seq):
-#             for subseq in range(n_subseq):
-#                 startpoint = seq * self.seq_len + subseq * self.subseq_len
-#                 endpoint = seq * self.seq_len + (subseq + 1) * self.subseq_len
-
-#                 # sequence length not divisible by subseq length
-#                 # if (endpoint > len(source)):
-#                 #     endpoint = len(source)
-
-#                 chunked_target[seq, subseq, :] = target[startpoint:endpoint]
+        sample = torchaudio.transforms.MuLawEncoding()(sample)
 
 
-#         return {'source': chunked_source, 'target': chunked_target}
-
-        
+        return sample
 
 class ToTensor():
     def __call__(self, sample):
@@ -186,27 +187,28 @@ class collate():
 
 if __name__ == "__main__":
 
-    # since sampling rate is 16 KHz we want 8 seconds audio files 
-    seq_len = 16000 * 8
-    subseq_len = 32000
-    trans = transforms.Compose([RandomCrop(seq_len, subseq_len),
-                                OneHotEncoding(),
-                                ToTensor()
-                                ])
-    # test dataset
-    dataset = MusicDataset("dataset/FMA/dataset_pcm_8000/Rock", "dataset/FMA/dataset_pcm_8000/Hip-Hop", transform=trans)
-    sample = dataset[0]
+    # since sampling rate is 16 KHz we want sample_length milliseconds audio files 
+    sample_length = 5000
+    seq_len = 16 * sample_length
+
+    normalize = True
+    trans = ToMulaw()
 
     # test dataloader
-    dataset = MusicDataset("dataset/FMA/dataset_pcm_8000/Rock", "dataset/FMA/dataset_pcm_8000/Hip-Hop",transform=trans)
-    print(dataset[0])
+    dataset = MusicDataset("/Users/davidetalon/Desktop/Dev/Generating-music/dataset/maestro_mono",
+                                                                seq_len = seq_len,
+                                                                normalize = normalize,
+                                                                transform=trans)
 
     
-    dataloader = DataLoader(dataset, batch_size=2, collate_fn= collate(), shuffle=True)
-    
+    dataloader = DataLoader(dataset, batch_size=15, collate_fn= collate(), shuffle=True)
+
+    start = time.time()
     for i_batch, batch_sample in enumerate(dataloader):
-        print(i_batch, batch_sample['source'].shape, batch_sample['target'].shape)
-
+        print(i_batch, batch_sample.shape)
+        end = time.time()
+        print("time: ", end-start)
+        start = time.time()
         if (i_batch == 3):
             break 
        
