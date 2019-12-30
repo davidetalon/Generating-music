@@ -3,7 +3,7 @@ import time
 import datetime
 import torch
 import numpy as np
-from dataset import MusicDataset, collate, OneHotEncoding, ToTensor, ToMulaw, Normalize
+from dataset import MusicDataset, collate, OneHotEncoding, ToTensor, ToMulaw
 from model import Generative, Discriminative, train_batch, weights_init, ReplayMemory
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -21,7 +21,7 @@ parser.add_argument('--gen_lr',          type=float, default=0.0002,    help=' G
 parser.add_argument('--discr_lr',        type=float, default=0.0001,    help=' Generator\'s learning rate')
 parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
 
-parser.add_argument('--batch_size',          type=int, default=16,    help='Dimension of the batch')
+parser.add_argument('--batch_size',          type=int, default=5,    help='Dimension of the batch')
 parser.add_argument('--num_epochs',             type=int, default=5,    help='Number of epochs')
 
 parser.add_argument('--save',             type=bool, default=True,    help='Save the generator and discriminator models')
@@ -43,12 +43,12 @@ if __name__ == '__main__':
 
     #%% Check device
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
+    # device = torch.device("cpu")
     # generative model params
     nz = 1
     ngf = 64
     # discriminative model params
-    ng = 256
+    ng = 1
     ndf = 64
   
     # set up the generator network
@@ -61,18 +61,21 @@ if __name__ == '__main__':
     gen.apply(weights_init)
     disc.apply(weights_init)
 
-    sample_length = 3000
-    seq_len = 16 * sample_length
+    # since sampling rate is 16 KHz we want sample_length milliseconds audio files 
+    sample_length = 5000
+    # seq_len = 16 * sample_length
+    seq_len = 16384
+
     normalize = True
-    trans = ToMulaw()
+    trans = None
 
-     # load data
-    dataset = MusicDataset("/Users/davidetalon/Desktop/Dev/Generating-music/dataset/maestro_mono",
-                                                        seq_len = seq_len,
-                                                        normalize = normalize,
-                                                        transform=trans)
+    # test dataloader
+    dataset = MusicDataset("dataset/maestro_mono",
+                                        seq_len = seq_len,
+                                        normalize = normalize,
+                                        transform=trans)
 
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collate(), shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
     if args.model_path != '':
         print("Loading the model")
@@ -124,34 +127,41 @@ if __name__ == '__main__':
     replay_memory = ReplayMemory(capacity=512)
     for epoch in range(args.num_epochs):
 
+        start_epoch = time.time()
+
         # Iterate batches
         for i, batch_sample in enumerate(dataloader):
 
+            batch = batch_sample.to(device)
+
+            # Update network
             start = time.time()
 
-            batch = batch_sample.to(device)
-            gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
-
-       
+            gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
+                batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
+            
+            # train_batch(gen, disc, batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
 
             # saving metrics
-            gen_loss_history.append(gen_loss.item())
-            real_loss_history.append(real_loss.item())
-            fake_loss_history.append(fake_loss.item())
-            discr_loss_history.append(discr_loss.item())
+            gen_loss_history.append(gen_loss)
+            real_loss_history.append(real_loss)
+            fake_loss_history.append(fake_loss)
+            discr_loss_history.append(discr_loss)
             D_x_history.append(D_x)
             D_G_z1_history.append(D_G_z1)
-            D_G_z2_history.append(D_G_z2)
-            discr_top_grad.append(discr_top.item())
-            discr_bottom_grad.append(discr_bottom.item())
-            gen_top_grad.append(gen_top.item())
-            gen_bottom_grad.append(gen_bottom.item())
+            D_G_z2_history.append(D_G_z1)
+            discr_top_grad.append(discr_top)
+            discr_bottom_grad.append(discr_bottom)
+            gen_top_grad.append(gen_top)
+            gen_bottom_grad.append(gen_bottom)
 
             end = time.time()
-            print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]"
-            % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), discr_loss, gen_loss, D_x, D_G_z1, D_G_z2))
-
+            print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]" % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), discr_loss, gen_loss, D_x, D_G_z1, D_G_z2))
+        
+        end_epoch = time.time()
+        print("\033[92m Epoch %d completed, time %d s \033[0m" %(epoch, end_epoch - start_epoch))
         if args.save and (epoch % 20 == 0):
+            
             gen_file_name = 'gen_params'+date+'.pth'
             discr_file_name = 'discr_params'+date+'.pth'
             torch.save(gen.state_dict(), ckp_dir / gen_file_name)

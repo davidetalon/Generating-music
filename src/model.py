@@ -130,9 +130,9 @@ class Discriminative(nn.Module):
 
     def forward(self, x):
         x = self.main(x)
-        print(x.shape)
-        x = x.view(x.shape[0], 256 * self.ndf )
+        x = x.view(x.shape[0], x.shape[1] * x.shape[2] )
         x = self.linear(x)
+        x = nn.Sigmoid()(x)
 
         return x
         
@@ -143,15 +143,16 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
 
     
     # (batch_size, channel, seq_len)
-    batch = torch.transpose(batch, 0, 1)
-    batch = torch.transpose(batch, 1, 2)
+
+    # batch = torch.transpose(batch, 0, 1)
+    # batch = torch.transpose(batch, 1, 2)
 
     batch_size = batch.shape[0]
-    # print(target_real_data.shape)
+    # # print(target_real_data.shape)
     
-    ############################
-    # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
-    ###########################
+    # ############################
+    # # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+    # ###########################
     disc_optimizer.zero_grad()
 
     # flipped labels and smoothing
@@ -183,8 +184,9 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     end = time.time()
 
     # adding to replay memory
-    replay_memory.push(fake_batch.detach())
-    experience = replay_memory.sample(batch_size)
+    # replay_memory.push(fake_batch.detach())
+    # experience = replay_memory.sample(batch_size)
+    experience = fake_batch.detach()
 
 
     output = disc(experience)
@@ -195,7 +197,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     D_G_z1 = output.mean().item()
 
     disc_top = disc.main[0].weight.grad.norm()
-    disc_bottom = disc.linear[-2].weight.grad.norm()
+    disc_bottom = disc.linear[-1].weight.grad.norm()
 
     disc_loss = (real_loss + fake_loss)/2
 

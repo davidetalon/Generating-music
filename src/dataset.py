@@ -52,41 +52,45 @@ class MusicDataset(Dataset):
                 dataset_chunks.append({"path":song, "idx":idx})
 
         self.dataset_chunks = dataset_chunks
-
         self.transform = transform
+
+        print("Dataset loaded: %d songs, %d chunks." % (len(songs), len(dataset_chunks)))
         
     def __len__(self):
 
         # we are working with unpaired songs, we could have different sizes
         return len(self.dataset_chunks)
 
-    def song_loader(self, chunk_info, normalize=True):
-        # song = np.memmap(path, dtype="int8", mode='r')
-
-        # sampling_rate, song = scipy.io.wavfile.read(path, mmap=False)
-
-        # data is loaded as a tensor
-        song, _ = torchaudio.load(chunk_info['path'], normalization=normalize, num_frames=self.seq_len, offset=self.seq_len*chunk_info['idx'])
-
-        return song
 
     def __getitem__(self, idx):
         
         
-        chunk_info = self.dataset_chunks[idx % len(self.dataset_chunks)]
-        # load the song
-        sample = self.song_loader(chunk_info)
+        chunk_info = self.dataset_chunks[idx]
+        # # load the song
+        sample = song_loader(chunk_info, self.seq_len)
 
-        # # get the selected chunk
-        # chunks = torch.split(song, self.seq_len, dim=-1)
+        # # # get the selected chunk
+        # # chunks = torch.split(song, self.seq_len, dim=-1)
         
-        # # print(song_path['idx'])
-        # sample = chunks[song_path['idx']]
+        # # # print(song_path['idx'])
+        # # sample = chunks[song_path['idx']]
 
         if self.transform:
             sample = self.transform(sample)
 
+
         return sample
+
+def song_loader(chunk_info, seq_len, normalize=True):
+    # song = np.memmap(path, dtype="int8", mode='r')
+
+    # sampling_rate, song = scipy.io.wavfile.read(path, mmap=False)
+
+    # data is loaded as a tensor
+    song, _ = torchaudio.load(chunk_info['path'], normalization=True, num_frames=seq_len, offset=seq_len*chunk_info['idx'])
+   
+
+    return song
 
 class Normalize():
 
@@ -153,11 +157,7 @@ class ToMulaw():
 
     def __call__(self, sample):
 
-
-        sample = torchaudio.transforms.MuLawEncoding()(sample)
-
-
-        return sample
+        return torchaudio.transforms.MuLawEncoding()(sample)
 
 class ToTensor():
     def __call__(self, sample):
@@ -195,10 +195,10 @@ if __name__ == "__main__":
     trans = ToMulaw()
 
     # test dataloader
-    dataset = MusicDataset("/Users/davidetalon/Desktop/Dev/Generating-music/dataset/maestro_mono",
-                                                                seq_len = seq_len,
-                                                                normalize = normalize,
-                                                                transform=trans)
+    dataset = MusicDataset("dataset/maestro_mono",
+                                        seq_len = seq_len,
+                                        normalize = normalize,
+                                        transform=trans)
 
     
     dataloader = DataLoader(dataset, batch_size=15, collate_fn= collate(), shuffle=True)
