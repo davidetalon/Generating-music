@@ -2,9 +2,10 @@ import argparse
 import time
 import datetime
 import torch
+import torchaudio
 import numpy as np
 from dataset import MusicDataset, collate, OneHotEncoding, ToTensor, ToMulaw
-from model import Generative, Discriminative, train_batch, weights_init, ReplayMemory
+from model import Generative, Discriminative, train_batch, weights_init, ReplayMemory, train_disc, train_gen
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 import json
@@ -19,6 +20,7 @@ parser = argparse.ArgumentParser(description='Train the CSP GAN')
 parser.add_argument('--seed',            type=int, default=30,    help=' Seed for the generation process')
 parser.add_argument('--gen_lr',          type=float, default=0.0002,    help=' Generator\'s learning rate')
 parser.add_argument('--discr_lr',        type=float, default=0.0001,    help=' Generator\'s learning rate')
+parser.add_argument('--wgan',            type=int,   default=0,         help='Choose to train with wgan or vanilla-gan')
 parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
 
 parser.add_argument('--batch_size',          type=int, default=5,    help='Dimension of the batch')
@@ -75,7 +77,7 @@ if __name__ == '__main__':
                                         normalize = normalize,
                                         transform=trans)
 
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
     if args.model_path != '':
         print("Loading the model")
@@ -87,8 +89,8 @@ if __name__ == '__main__':
     # test training
     gen_optimizer = torch.optim.RMSprop(gen.parameters(), lr=5e-5)
     disc_optimizer = torch.optim.RMSprop(disc.parameters(), lr=5e-5)
-    # gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
-    # disc_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.999))
+    gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.9))
+    disc_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.9))
     # disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
 
     adversarial_loss = torch.nn.BCELoss()
@@ -130,14 +132,33 @@ if __name__ == '__main__':
         start_epoch = time.time()
 
         # Iterate batches
-        for i, batch_sample in enumerate(dataloader):
+        data_iter = iter(dataloader)
+        i = -1
+        while i < len(dataloader) and i < 26280:
 
-            batch = batch_sample.to(device)
+            
+
+        # for i, batch_sample in enumerate(dataloader):
+           
+            # batch_sample = data_iter.next()
+            # i += 1
+            # batch = batch_sample.to(device)
 
             # Update network
             start = time.time()
 
-            gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
+            if(args.wgan >= 1):
+                for t in range(5):
+                    batch_sample = data_iter.next()
+                    i += 1
+                    batch = batch_sample.to(device)
+                    disc_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom = train_disc(gen, disc, batch, 10, disc_optimizer, device)
+                    
+                gen_loss, gen_top, gen_bottom = train_gen(gen, disc, batch, gen_optimizer, device)
+
+                real_loss = fake_loss = 0        
+            else:
+                gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
                 batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
             
             # train_batch(gen, disc, batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
@@ -146,30 +167,49 @@ if __name__ == '__main__':
             gen_loss_history.append(gen_loss)
             real_loss_history.append(real_loss)
             fake_loss_history.append(fake_loss)
-            discr_loss_history.append(discr_loss)
+            discr_loss_history.append(disc_loss)
             D_x_history.append(D_x)
             D_G_z1_history.append(D_G_z1)
-            D_G_z2_history.append(D_G_z1)
+            D_G_z2_history.append(D_G_z2)
             discr_top_grad.append(discr_top)
             discr_bottom_grad.append(discr_bottom)
             gen_top_grad.append(gen_top)
             gen_bottom_grad.append(gen_bottom)
 
             end = time.time()
-            print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]" % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), discr_loss, gen_loss, D_x, D_G_z1, D_G_z2))
-        
+            print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]" % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), disc_loss, gen_loss, D_x, D_G_z1, D_G_z2))
+
+            if args.save and ((i+1) % 5000 == 0) :
+            
+                gen_file_name = 'gen_params'+date+'.pth'
+                discr_file_name = 'discr_params'+date+'.pth'
+                torch.save(gen.state_dict(), ckp_dir / gen_file_name)
+                torch.save(disc.state_dict(), ckp_dir / discr_file_name)
+                with torch.no_grad():
+                    fake = gen(fixed_noise).detach().cpu()
+                    fake = torch.squeeze(fake, dim = 0)
+                    path  = prod_dir / (date + "epoch" + str(epoch) + ".wav")
+                    torchaudio.save(str(path), fake, 16000)
+                    # torchaudio.save(prod_dir / (date + "epoch" + str(epoch) + ".wav"), prova, 16000)
+                    # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
+                    # scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(i) + ".wav"), 16000, fake.T )
+
+
         end_epoch = time.time()
         print("\033[92m Epoch %d completed, time %d s \033[0m" %(epoch, end_epoch - start_epoch))
-        if args.save and (epoch % 20 == 0):
+        if args.save :
             
             gen_file_name = 'gen_params'+date+'.pth'
             discr_file_name = 'discr_params'+date+'.pth'
             torch.save(gen.state_dict(), ckp_dir / gen_file_name)
             torch.save(disc.state_dict(), ckp_dir / discr_file_name)
             with torch.no_grad():
-                fake = gen(fixed_noise).detach().cpu().numpy()
+                fake = gen(fixed_noise).detach().cpu()
+                fake = torch.squeeze(fake, dim = 0)
+                path  = prod_dir / (date + "epoch" + str(epoch) + ".wav")
+                torchaudio.save(str(path), fake, 16000)
                 # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
-                scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(epoch) + ".wav"), 16000, fake.T )
+                # scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(epoch) + ".wav"), 16000, fake.T )
 
     #Save all needed parameters
     print("Saving parameters")

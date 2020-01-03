@@ -79,7 +79,7 @@ class MusicDataset(Dataset):
             sample = self.transform(sample)
 
 
-        return sample
+        return sample.to(torch.float)
 
 def song_loader(chunk_info, seq_len, normalize=True):
     # song = np.memmap(path, dtype="int8", mode='r')
@@ -157,7 +157,9 @@ class ToMulaw():
 
     def __call__(self, sample):
 
-        return torchaudio.transforms.MuLawEncoding()(sample)
+        # sample = torchaudio.transforms.MuLawEncoding()(sample)
+        sample = torchaudio.functional.mu_law_encoding(sample, 256)
+        return sample
 
 class ToTensor():
     def __call__(self, sample):

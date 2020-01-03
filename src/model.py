@@ -55,30 +55,27 @@ class Generative(nn.Module):
         self.main = nn.Sequential(
 
             nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.BatchNorm1d(ngf * 8),
             nn.ReLU(inplace=True),
             # nn.Dropout(0.5),
             # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.BatchNorm1d(ngf * 4),
             nn.ReLU(inplace=True),
             # nn.Dropout(0.5),
 
             # # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.BatchNorm1d(ngf * 2),
             nn.ReLU(inplace=True),
             # nn.Dropout(0.5),
 
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.BatchNorm1d(ngf),
             nn.ReLU(inplace=True),
             # nn.Dropout(0.5),
 
             # state size. (ngf) x 32 x 32
             nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.Tanh()
+            nn.Tanh(),
+
             # nn.Softmax(dim=1)
             # state size. (nc) x 64 x 64
         )
@@ -104,35 +101,33 @@ class Discriminative(nn.Module):
         self.main = nn.Sequential(
 
             nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
-            nn.BatchNorm1d(ndf),
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True),
-            nn.BatchNorm1d(ndf * 2),
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True),
-            nn.BatchNorm1d(ndf * 4),
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
-            nn.BatchNorm1d(ndf * 8),
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf*8) x 4 x 4
             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
-            nn.BatchNorm1d(ndf * 16),
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Flatten(),
+            nn.Linear(ndf*256, 1),
+            nn.Sigmoid()
         )
 
-        self.linear = nn.Sequential(
-            nn.Linear(256 * self.ndf, 1)
-        )
+        # self.linear = nn.Sequential(
+        #     nn.Linear(256 * self.ndf, 1)
+        # )
 
     def forward(self, x):
         x = self.main(x)
-        x = x.view(x.shape[0], x.shape[1] * x.shape[2] )
-        x = self.linear(x)
-        x = nn.Sigmoid()(x)
+        # x = x.view(x.shape[0], x.shape[1] * x.shape[2] )
+        # x = self.linear(x)
+        # x = nn.Sigmoid()(x)
 
         return x
         
@@ -178,10 +173,8 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     end = time.time()
 
     rnd_assgn = torch.randn((batch_size, 1, 100), device=device)
-
-    start = time.time()
     fake_batch = gen(rnd_assgn)
-    end = time.time()
+
 
     # adding to replay memory
     # replay_memory.push(fake_batch.detach())
@@ -201,9 +194,8 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
 
     disc_loss = (real_loss + fake_loss)/2
 
-    start = time.time()
     disc_optimizer.step()
-    end = time.time()
+
  
 
      ############################
@@ -225,6 +217,98 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, device
     gen_optimizer.step()
 
     return gen_loss.item(), real_loss.item(), fake_loss.item(), disc_loss.item(), D_x, D_G_z1, D_G_z2, disc_top.item(), disc_bottom.item(), gen_top.item(), gen_bottom.item()
+
+def train_disc(gen, disc, batch, lamb, disc_optimizer, device):
+    
+    # for t in range(n_critic):
+
+    disc_optimizer.zero_grad()
+    # loss = torch.zeros(batch.shape[0])
+    batch_size = batch.shape[0] 
+    
+    # for i, sample in enumerate(batch.split(1, dim=0)):
+        # sampling the fake_sample and u
+
+    epsilon = torch.rand(1, device=device, requires_grad=True)
+    rnd_assgn = torch.randn((batch_size, 1, 100), device=device, requires_grad=True)
+    fake_batch = gen(rnd_assgn)
+    
+
+    interpol = epsilon * batch + (1-epsilon) * fake_batch
+
+    # computing the critics
+    real_critic = disc(batch)
+    real_critic = real_critic.mean()
+
+    fake_critic = disc(fake_batch)
+    fake_critic = fake_critic.mean()
+
+
+    interpol_critic = disc(interpol)
+    gradients = torch.autograd.grad(outputs=interpol_critic, inputs=interpol,
+                     grad_outputs=torch.ones_like(interpol_critic).cuda(),
+                     retain_graph=True, create_graph=True, only_inputs=True)[0]
+    gradients = gradients.view(gradients.size(0),  -1)
+    gradient_norm = gradients.norm(2, dim=1)
+    gp = ((gradient_norm - 1)**2)
+    interpol_critic = interpol_critic.mean()
+    gp = gp.mean()
+
+
+    
+
+    # grad = torch.autograd.grad(midpoint_critic, u, grad_outputs= torch.ones_like(midpoint_critic).to(device))
+    # grad_norm = torch.norm(grad[0], 2, dim=2)
+    
+    # gp = torch.pow(grad_norm - 1, 2)
+    # midpoint_critic = midpoint_critic.mean()
+    # gp = gp.mean() 
+    loss = fake_critic - real_critic + lamb * gp
+    loss.backward()
+
+    # gathering the loss and updating
+    disc_optimizer.step()
+        
+    # renaming
+    D_x = real_critic
+    D_G_z1 = fake_critic
+    D_G_z2 = interpol_critic
+    
+    disc_top = disc.main[0].weight.grad.norm()
+    disc_bottom = disc.main[-2].weight.grad.norm()
+
+    return loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom
+
+    # def optimize_disc(true_loss, fake_loss, gp_loss, disc_optimizer):
+    #     true_loss = true_loss.mean()
+    #     fake_loss = fake_loss.mean()
+    #     gp_loss = lamb * gp_loss.mean()
+
+    #     disc_loss = fake_loss - true_loss + gp_loss
+    #     disc_optimizer.step()
+
+def train_gen(gen, disc, batch, gen_optimizer, device):
+
+    # zero the gradient
+    gen_optimizer.zero_grad()
+
+    batch_size = batch.shape[0]
+    # sampling a batch of latent variables
+    rnd_assgn = torch.randn((batch_size, 1, 100), device=device)
+    fake_batch = gen(rnd_assgn)
+
+    # computing the critic
+    critic = disc(fake_batch)
+    loss = -critic.mean()
+
+    loss.backward()
+    gen_optimizer.step()
+
+    gen_top = gen.linear.weight.grad.norm()
+    gen_bottom = gen.main[-2].weight.grad.norm()
+
+    return loss, gen_top, gen_bottom
+    
 
 if __name__=='__main__':
 
