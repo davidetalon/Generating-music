@@ -79,7 +79,7 @@ class MusicDataset(Dataset):
             sample = self.transform(sample)
 
 
-        return sample.to(torch.float)
+        return sample
 
 def song_loader(chunk_info, seq_len, normalize=True):
     # song = np.memmap(path, dtype="int8", mode='r')

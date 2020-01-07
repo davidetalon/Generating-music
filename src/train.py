@@ -24,6 +24,7 @@ parser.add_argument('--wgan',            type=int,   default=0,         help='Ch
 parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
 
 parser.add_argument('--batch_size',          type=int, default=5,    help='Dimension of the batch')
+parser.add_argument('--latent_dim',          type=int, default=90,    help='Dimension of the latent space')
 parser.add_argument('--num_epochs',             type=int, default=5,    help='Number of epochs')
 
 parser.add_argument('--save',             type=bool, default=True,    help='Save the generator and discriminator models')
@@ -52,9 +53,11 @@ if __name__ == '__main__':
     # discriminative model params
     ng = 1
     ndf = 64
+
+    latent_dim = args.latent_dim
   
     # set up the generator network
-    gen = Generative(nz, ng, ngf)
+    gen = Generative(nz, ng, ngf, latent_dim)
     gen.to(device)
     # set up the discriminative models
     disc = Discriminative(ng, ndf)
@@ -87,8 +90,6 @@ if __name__ == '__main__':
         disc.load_state_dict(torch.load(disc_path, map_location=device))
    
     # test training
-    gen_optimizer = torch.optim.RMSprop(gen.parameters(), lr=5e-5)
-    disc_optimizer = torch.optim.RMSprop(disc.parameters(), lr=5e-5)
     gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.9))
     disc_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.9))
     # disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
@@ -152,14 +153,14 @@ if __name__ == '__main__':
                     batch_sample = data_iter.next()
                     i += 1
                     batch = batch_sample.to(device)
-                    disc_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom = train_disc(gen, disc, batch, 10, disc_optimizer, device)
+                    disc_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom = train_disc(gen, disc, batch, 10, disc_optimizer, latent_dim, device)
                     
-                gen_loss, gen_top, gen_bottom = train_gen(gen, disc, batch, gen_optimizer, device)
+                gen_loss, gen_top, gen_bottom = train_gen(gen, disc, batch, gen_optimizer, latent_dim, device)
 
                 real_loss = fake_loss = 0        
             else:
                 gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
-                batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
+                batch, adversarial_loss, disc_optimizer, gen_optimizer, latent_dim, device, replay_memory)
             
             # train_batch(gen, disc, batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
 
