@@ -112,7 +112,7 @@ if __name__ == '__main__':
     gen_bottom_grad = []
 
 
-    fixed_noise = torch.randn((1, 1, 100), device=device)
+    fixed_noise = torch.randn((1, 1, latent_dim), device=device)
 
 
     date = datetime.datetime.now()
