@@ -83,8 +83,8 @@ class Generative(nn.Module):
     
     def forward(self, x):
         x = self.linear(x)
-        x = x.view(x.shape[0], 16 * self.ngf, 16)
         x = nn.ReLU()(x)
+        x = x.view(x.shape[0], 16 * self.ngf, 16)
         x = self.main(x)
 
         return x
@@ -118,15 +118,9 @@ class Discriminative(nn.Module):
             nn.Linear(ndf*256, 1)
         )
 
-        # self.linear = nn.Sequential(
-        #     nn.Linear(256 * self.ndf, 1)
-        # )
 
     def forward(self, x):
         x = self.main(x)
-        # x = x.view(x.shape[0], x.shape[1] * x.shape[2] )
-        # x = self.linear(x)
-        # x = nn.Sigmoid()(x)
 
         return x
         
@@ -196,7 +190,6 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent
     disc_optimizer.step()
 
  
-
     ############################
     # (2) Update G network: maximize log(D(G(z)))
     ###########################
@@ -217,136 +210,57 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent
 
     return gen_loss.item(), real_loss.item(), fake_loss.item(), disc_loss.item(), D_x, D_G_z1, D_G_z2, disc_top.item(), disc_bottom.item(), gen_top.item(), gen_bottom.item()
 
-# def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
-
-#     ############################
-#     # (2) Update D network
-#     ###########################
-
-#     disc_optimizer.zero_grad()
-
-#     # getting the batch size
-#     batch_size = batch.shape[0] 
-
-#     # vectors of 1's and -1's
-#     ones = torch.tensor(1, dtype=torch.float, device=device, requires_grad=True)
-#     n_ones = -1 * ones
-    
-#     # sampling random variables
-#     epsilon = torch.rand((batch_size, 1, 1), device=device, requires_grad=True)
-#     rnd_assgn = torch.randn((batch_size, 1, latent_dim), device=device, requires_grad=True)
-
-#     # computing the batch
-#     fake_batch = gen(rnd_assgn)
-    
-#     interpolation = epsilon * batch + (1-epsilon) * fake_batch
-
-#     # computing the critic of real samples
-#     D_real = disc(batch)
-#     D_real = D_real.mean()
-#     # D_real.backward(n_ones)
-
-#     # computing the critic of fake samples
-#     D_fake = disc(fake_batch)
-#     D_fake = D_fake.mean()
-#     # D_fake.backward(ones)
-
-#     # computing the gp loss
-#     D_interpolation = disc(interpolation)
-#     gradients = torch.autograd.grad(outputs=D_interpolation, inputs=interpolation,
-#                               grad_outputs=torch.ones_like(D_interpolation),
-#                               create_graph=True, retain_graph=True, only_inputs=True)[0]
-#     # gradients = torch.randn((64, 1, 16384), device=device, requires_grad=True)
-#     gradients = gradients.view(gradients.size(0),  -1)
-#     gradient_norm = gradients.norm(2, dim=1)
-#     gp = ((gradient_norm - 1)**2)
-#     D_interpolation = D_interpolation.mean()
-#     gp = lmbda * gp.mean()
-
-#     # gp.backward(ones)
-
-
-#     print("ciao")
-
-#     # grad = torch.autograd.grad(midpoint_critic, u, grad_outputs= torch.ones_like(midpoint_critic).to(device))
-#     # grad_norm = torch.norm(grad[0], 2, dim=1)
-    
-#     # gp = torch.pow(grad_norm - 1, 2)
-#     # midpoint_critic = midpoint_critic.mean()
-#     # gp = gp.mean() 
-#     loss = D_fake - D_real + gp
-#     loss.backward()
-
-#     # gathering the loss and updating
-#     disc_optimizer.step()
-        
-#     # renaming
-#     D_x = D_real
-#     D_G_z1 = D_fake
-#     D_G_z2 = gp
-    
-#     disc_top = disc.main[0].weight.grad.norm()
-#     disc_bottom = disc.main[-2].weight.grad.norm()
-
-#     return loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom
-
-#     # def optimize_disc(true_loss, fake_loss, gp_loss, disc_optimizer):
-#     #     true_loss = true_loss.mean()
-#     #     fake_loss = fake_loss.mean()
-#     #     gp_loss = lamb * gp_loss.mean()
-
-#     #     disc_loss = fake_loss - true_loss + gp_loss
-#     #     disc_optimizer.step()
-
 def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
+
 
     ############################
     # (2) Update D network
     ###########################
 
-    disc_optimizer.zero_grad()
+    disc.zero_grad()
 
     # getting the batch size
     batch_size = batch.shape[0] 
 
     # vectors of 1's and -1's
-    ones = torch.tensor(1, dtype=torch.float, device=device)
-    n_ones = -1 * ones
+    one = torch.tensor(1, dtype=torch.float, device=device, requires_grad=True)
+    n_one = -1 * one
     
     # sampling random variables
     epsilon = torch.rand((batch_size, 1, 1), device=device, requires_grad=True)
-    rnd_assgn = torch.randn((batch_size, 1, latent_dim), device=device, requires_grad=True)
+    epsilon = epsilon.expand(epsilon.size())
+    rnd_assgn = torch.empty((batch_size,1, latent_dim), device=device).uniform_(-1, 1)
 
     # computing the batch
     fake_batch = gen(rnd_assgn)
     
-    interpolation = epsilon * batch + (1-epsilon) * fake_batch
-
+    
     # computing the critic of real samples
     D_real = disc(batch)
     D_real = D_real.mean()
-    # D_real.backward(n_ones)
+    # D_real.backward(n_one)
 
     # computing the critic of fake samples
     D_fake = disc(fake_batch)
     D_fake = D_fake.mean()
-    # D_fake.backward(ones)
+    # D_fake.backward(one)
 
     # computing the gp loss
+    interpolation = epsilon * batch + (1-epsilon) * fake_batch
     D_interpolation = disc(interpolation)
     gradients = torch.autograd.grad(outputs=D_interpolation, inputs=interpolation,
-                              grad_outputs=torch.ones_like(D_interpolation).to(device),
+                              grad_outputs=torch.ones_like(D_interpolation, device=device),
                               create_graph=True, retain_graph=True, only_inputs=True)[0]
+    # gradients = torch.randn((64, 1, 16384), device=device, requires_grad=True)
     gradients = gradients.view(gradients.size(0),  -1)
     gradient_norm = gradients.norm(2, dim=1)
     gp = ((gradient_norm - 1)**2)
     D_interpolation = D_interpolation.mean()
     gp = lmbda * gp.mean()
 
-    # gp.backward(ones)
+    # gp.backward(one)
 
 
-    
 
     # grad = torch.autograd.grad(midpoint_critic, u, grad_outputs= torch.ones_like(midpoint_critic).to(device))
     # grad_norm = torch.norm(grad[0], 2, dim=1)
@@ -356,6 +270,7 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     # gp = gp.mean() 
     loss = D_fake - D_real + gp
     loss.backward()
+
     # gathering the loss and updating
     disc_optimizer.step()
         
@@ -369,17 +284,99 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
 
     return loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom
 
+#     # def optimize_disc(true_loss, fake_loss, gp_loss, disc_optimizer):
+#     #     true_loss = true_loss.mean()
+#     #     fake_loss = fake_loss.mean()
+#     #     gp_loss = lamb * gp_loss.mean()
+
+#     #     disc_loss = fake_loss - true_loss + gp_loss
+#     #     disc_optimizer.step()
+
+# def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
+
+#     ############################
+#     # (2) Update D network
+#     ###########################
+
+#     disc_optimizer.zero_grad()
+
+#     # getting the batch size
+#     batch_size = batch.shape[0] 
+
+#     # vectors of 1's and -1's
+#     one = torch.tensor(1).float().to(device)
+#     n_one = -1 * one
+    
+#     # sampling random variables
+#     epsilon = torch.rand((batch_size, 1, 1), device=device)
+#     rnd_assgn = torch.randn((batch_size, 1, latent_dim), device=device)
+
+#     # computing the batch
+#     fake_batch = gen(rnd_assgn)
+    
+#     interpolation = epsilon * batch + (1-epsilon) * fake_batch
+
+#     # computing the critic of real samples
+#     D_real = disc(batch)
+#     D_real = D_real.mean()
+#     D_real.backward(n_one)
+
+#     # computing the critic of fake samples
+#     D_fake = disc(fake_batch)
+#     D_fake = D_fake.mean()
+#     D_fake.backward(one) 
+
+#     # computing the gp loss
+#     D_interpolation = disc(interpolation)
+#     gradients = torch.autograd.grad(outputs=D_interpolation, inputs=interpolation,
+#                               grad_outputs=torch.ones_like(D_interpolation).to(device),
+#                               create_graph=True, retain_graph=True, only_inputs=True)[0]
+#     gradients = gradients.view(gradients.size(0),  -1)
+#     gradient_norm = gradients.norm(2, dim=1)
+#     gp = ((gradient_norm - 1)**2)
+#     D_interpolation = D_interpolation.mean()
+#     gp = lmbda * gp.mean()
+
+#     gp.backward(one)
+
+
+    
+
+#     # grad = torch.autograd.grad(midpoint_critic, u, grad_outputs= torch.ones_like(midpoint_critic).to(device))
+#     # grad_norm = torch.norm(grad[0], 2, dim=1)
+    
+#     # gp = torch.pow(grad_norm - 1, 2)
+#     # midpoint_critic = midpoint_critic.mean()
+#     # gp = gp.mean() 
+#     loss = D_fake - D_real + gp
+#     # loss.backward()
+#     # gathering the loss and updating
+#     disc_optimizer.step()
+        
+#     # renaming
+#     D_x = D_real
+#     D_G_z1 = D_fake
+#     D_G_z2 = gp
+    
+#     disc_top = disc.main[0].weight.grad.norm()
+#     disc_bottom = disc.main[-1].weight.grad.norm()
+
+#     return loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom
+
 
 def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
 
+    for p in disc.parameters():
+        p.requires_grad = False
+
     # zero the gradient
-    gen_optimizer.zero_grad()
+    gen.zero_grad()
 
     batch_size = batch.shape[0]
 
     n_ones = -1 * torch.tensor(1, dtype=torch.float, device=device)
     # sampling a batch of latent variables
-    rnd_assgn = torch.randn((batch_size, 1, latent_dim), device=device)
+    rnd_assgn = torch.empty((batch_size,1, latent_dim), device=device).uniform_(-1, 1)
     fake_batch = gen(rnd_assgn)
 
     # computing the critic

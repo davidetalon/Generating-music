@@ -90,8 +90,8 @@ if __name__ == '__main__':
         disc.load_state_dict(torch.load(disc_path, map_location=device))
    
     # test training
-    gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.9))
-    disc_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.9))
+    gen_optimizer = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.5, 0.9))
+    disc_optimizer = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.5, 0.9))
     # disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
 
     adversarial_loss = torch.nn.BCELoss()
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     gen_bottom_grad = []
 
 
-    fixed_noise = torch.randn((1, 1, latent_dim), device=device)
+    fixed_noise = torch.empty((1, 1, latent_dim), device=device).uniform_(-1, 1)
 
 
     date = datetime.datetime.now()
@@ -149,6 +149,10 @@ if __name__ == '__main__':
             start = time.time()
 
             if(args.wgan >= 1):
+
+                for p in disc.parameters():
+                    p.requires_grad = True
+
                 for t in range(5):
                     batch_sample = data_iter.next()
                     i += 1
@@ -189,7 +193,7 @@ if __name__ == '__main__':
                 with torch.no_grad():
                     fake = gen(fixed_noise).detach().cpu()
                     fake = torch.squeeze(fake, dim = 0)
-                    path  = prod_dir / (date + "epoch" + str(epoch) + ".wav")
+                    path  = prod_dir / (date + "epoch" + str(epoch) + str(i+1) + ".wav")
                     torchaudio.save(str(path), fake, 16000)
                     # torchaudio.save(prod_dir / (date + "epoch" + str(epoch) + ".wav"), prova, 16000)
                     # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
