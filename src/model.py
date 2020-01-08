@@ -377,7 +377,7 @@ def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
 
     batch_size = batch.shape[0]
 
-    n_ones = -1* torch.ones(batch_size, device = device)
+    ones = -1 * torch.tensor(1, dtype=torch.float, device=device)
     # sampling a batch of latent variables
     rnd_assgn = torch.randn((batch_size, 1, latent_dim), device=device)
     fake_batch = gen(rnd_assgn)
