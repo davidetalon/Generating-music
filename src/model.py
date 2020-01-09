@@ -255,7 +255,7 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     gradients = gradients.view(gradients.size(0),  -1)
     gradient_norm = gradients.norm(2, dim=1)
     gp = ((gradient_norm - 1)**2)
-    D_interpolation = D_interpolation.mean()
+    # D_interpolation = D_interpolation.mean()
     gp = lmbda * gp.mean()
 
     # gp.backward(one)

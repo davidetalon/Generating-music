@@ -43,6 +43,7 @@ class MusicDataset(Dataset):
         for song in songs:
 
             data = torchaudio.info(song)
+
             # get the number of chunks in the audio file
             n_chunks = int((data[0].length/data[0].channels)/self.seq_len)
 
@@ -67,6 +68,9 @@ class MusicDataset(Dataset):
         chunk_info = self.dataset_chunks[idx]
         # # load the song
         sample = song_loader(chunk_info, self.seq_len)
+        sample = sample[0]
+        sample = torch.unsqueeze(sample, dim=0)
+
 
         # # # get the selected chunk
         # # chunks = torch.split(song, self.seq_len, dim=-1)
@@ -86,7 +90,7 @@ def song_loader(chunk_info, seq_len, normalize=True):
     # sampling_rate, song = scipy.io.wavfile.read(path, mmap=False)
 
     # data is loaded as a tensor
-    song, _ = torchaudio.load(chunk_info['path'], normalization=True, num_frames=seq_len, offset=seq_len*chunk_info['idx'])
+    song, _ = torchaudio.load(chunk_info['path'], num_frames=seq_len, offset=seq_len*chunk_info['idx'])
    
 
     return song

@@ -11,6 +11,7 @@ from torchvision import transforms
 import json
 from pathlib import Path
 import scipy.io.wavfile
+import soundfile as sf
 
 
 # create the parser
@@ -21,19 +22,45 @@ parser.add_argument('--seed',            type=int, default=30,    help=' Seed fo
 parser.add_argument('--gen_lr',          type=float, default=0.0002,    help=' Generator\'s learning rate')
 parser.add_argument('--discr_lr',        type=float, default=0.0001,    help=' Generator\'s learning rate')
 parser.add_argument('--wgan',            type=int,   default=0,         help='Choose to train with wgan or vanilla-gan')
+parser.add_argument('--disc_updates',    type=int,   default=5,         help='Number of critic updates')
+
 parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
 
 parser.add_argument('--batch_size',          type=int, default=5,    help='Dimension of the batch')
-parser.add_argument('--latent_dim',          type=int, default=90,    help='Dimension of the latent space')
+parser.add_argument('--generated_samples',   type=int, default=4,    help='Number of generated samples for inspection')
+parser.add_argument('--latent_dim',          type=int, default=100,    help='Dimension of the latent space')
 parser.add_argument('--num_epochs',             type=int, default=5,    help='Number of epochs')
 
 parser.add_argument('--save',             type=bool, default=True,    help='Save the generator and discriminator models')
+parser.add_argument('--save_interleaving',type=int, default=2,       help='Number of epochs between backups')
+
 parser.add_argument('--out_dir',          type=str, default='models/',    help='Folder where to save the model')
 parser.add_argument('--prod_dir',          type=str, default='produced/',    help='Folder where to save the model')
 parser.add_argument('--ckp_dir',          type=str, default='ckps',    help='Folder where to save the model')
 parser.add_argument('--metrics_dir',          type=str, default='metrics/',    help='Folder where to save the model')
 
 parser.add_argument('--model_path',          type=str, default='',    help='Path to models to restore')
+
+def save_models(date, ckp_dir, gen_file_name, disc_file_name):
+    print("Backing up the discriminator and generator models")
+    torch.save(gen.state_dict(), ckp_dir / gen_file_name)
+    torch.save(disc.state_dict(), ckp_dir / disc_file_name)
+
+def sample_fake(latent, date, epoch, prod_dir):
+
+    with torch.no_grad():
+        print("Sampling from generator distribution: store samples for inspection.")
+        fake = gen(latent).detach().cpu()
+        # saving each generated audio independently
+        for idx, sample in enumerate(torch.split(fake, 1, dim=0)):
+            sample = torch.squeeze(sample)
+            target_path  = prod_dir / (date + "_" + str(epoch) + "_" + str(idx) + ".wav")
+            sample = sample.numpy()
+            sf.write(target_path, sample, 16000, format='WAV', subtype='FLOAT')
+
+            # torchaudio.save(str(path), fake, 16000)
+            # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
+            # scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(epoch) + ".wav"), 16000, fake.T )
 
 
 if __name__ == '__main__':
@@ -75,7 +102,7 @@ if __name__ == '__main__':
     trans = None
 
     # test dataloader
-    dataset = MusicDataset("dataset/maestro_mono",
+    dataset = MusicDataset("dataset/piano",
                                         seq_len = seq_len,
                                         normalize = normalize,
                                         transform=trans)
@@ -112,11 +139,11 @@ if __name__ == '__main__':
     gen_bottom_grad = []
 
 
-    fixed_noise = torch.empty((1, 1, latent_dim), device=device).uniform_(-1, 1)
+    fixed_noise = torch.empty((args.generated_samples, 1, latent_dim), device=device).uniform_(-1, 1)
 
 
     date = datetime.datetime.now()
-    date = date.strftime("%d-%m-%Y,%H-%M-%S")
+    date = date.strftime("%d-%m-%Y_%H-%M-%S")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -125,6 +152,8 @@ if __name__ == '__main__':
         ckp_dir.mkdir(parents=True, exist_ok=True)
         prod_dir = Path(args.prod_dir)
         prod_dir.mkdir(parents=True, exist_ok=True)
+        gen_file_name = 'gen_params'+date+'.pth'
+        disc_file_name = 'discr_params'+date+'.pth'
 
     # replay_memory = torch.empty((args.batch_size, ng, subseq_len), device=device)
     replay_memory = ReplayMemory(capacity=512)
@@ -135,7 +164,7 @@ if __name__ == '__main__':
         # Iterate batches
         data_iter = iter(dataloader)
         i = -1
-        while i < len(dataloader) and i < 26280:
+        while i < len(dataloader) and i < 9:
 
             
 
@@ -153,7 +182,7 @@ if __name__ == '__main__':
                 for p in disc.parameters():
                     p.requires_grad = True
 
-                for t in range(5):
+                for t in range(args.disc_updates):
                     batch_sample = data_iter.next()
                     i += 1
                     batch = batch_sample.to(device)
@@ -186,54 +215,22 @@ if __name__ == '__main__':
 
             if args.save and ((i+1) % 5000 == 0) :
             
-                gen_file_name = 'gen_params'+date+'.pth'
-                discr_file_name = 'discr_params'+date+'.pth'
-                torch.save(gen.state_dict(), ckp_dir / gen_file_name)
-                torch.save(disc.state_dict(), ckp_dir / discr_file_name)
-                with torch.no_grad():
-                    fake = gen(fixed_noise).detach().cpu()
-                    fake = torch.squeeze(fake, dim = 0)
-                    path  = prod_dir / (date + "epoch" + str(epoch) + str(i+1) + ".wav")
-                    torchaudio.save(str(path), fake, 16000)
-                    # torchaudio.save(prod_dir / (date + "epoch" + str(epoch) + ".wav"), prova, 16000)
-                    # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
-                    # scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(i) + ".wav"), 16000, fake.T )
+                save_models(date, ckp_dir, gen_file_name, disc_file_name)
+                sample_fake(fixed_noise, date, epoch, prod_dir)
 
 
         end_epoch = time.time()
         print("\033[92m Epoch %d completed, time %d s \033[0m" %(epoch, end_epoch - start_epoch))
-        if args.save :
-            
-            gen_file_name = 'gen_params'+date+'.pth'
-            discr_file_name = 'discr_params'+date+'.pth'
-            torch.save(gen.state_dict(), ckp_dir / gen_file_name)
-            torch.save(disc.state_dict(), ckp_dir / discr_file_name)
-            with torch.no_grad():
-                fake = gen(fixed_noise).detach().cpu()
-                fake = torch.squeeze(fake, dim = 0)
-                path  = prod_dir / (date + "epoch" + str(epoch) + ".wav")
-                torchaudio.save(str(path), fake, 16000)
-                # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
-                # scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(epoch) + ".wav"), 16000, fake.T )
+
+        if args.save and ((epoch+1) % args.save_interleaving == 0):
+            save_models(date, ckp_dir, gen_file_name, disc_file_name)
+            sample_fake(fixed_noise, date, epoch, prod_dir)
+
 
     #Save all needed parameters
     print("Saving parameters")
     # Create output dir
 
-    # Save network parameters
-    # date = datetime.datetime.now()
-    # date = date.strftime("%d-%m-%Y,%H-%M-%S")
-    if args.save:
-        gen_file_name = 'gen_params'+date+'.pth'
-        discr_file_name = 'discr_params'+date+'.pth'
-        torch.save(gen.state_dict(), out_dir / gen_file_name)
-        torch.save(disc.state_dict(), out_dir / discr_file_name)
-
-
-    # Save training parameters
-    # params_file_name = 'training_args'+date+'.json'
-    # with open(out_dir / params_file_name, 'w') as f:
-    #     json.dump(vars(args), f, indent=4)
 
     metrics = {'parameters':vars(args),
             'gen_loss':gen_loss_history, 
@@ -255,3 +252,5 @@ if __name__ == '__main__':
     with open(metrics_dir / metric_file_name, 'w') as f:
         json.dump(metrics, f, indent=4)
     print("Completed successfully.")
+
+
