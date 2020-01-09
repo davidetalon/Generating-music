@@ -15,18 +15,18 @@ import soundfile as sf
 
 
 # create the parser
-parser = argparse.ArgumentParser(description='Train the CSP GAN')
+parser = argparse.ArgumentParser(description='Train the GAN for generating Piano Music')
 
 # seed
 parser.add_argument('--seed',            type=int, default=30,    help=' Seed for the generation process')
-parser.add_argument('--gen_lr',          type=float, default=0.0002,    help=' Generator\'s learning rate')
-parser.add_argument('--discr_lr',        type=float, default=0.0001,    help=' Generator\'s learning rate')
+parser.add_argument('--gen_lr',          type=float, default=1e-4,    help=' Generator\'s learning rate')
+parser.add_argument('--discr_lr',        type=float, default=1e-4,    help=' Generator\'s learning rate')
 parser.add_argument('--wgan',            type=int,   default=0,         help='Choose to train with wgan or vanilla-gan')
 parser.add_argument('--disc_updates',    type=int,   default=5,         help='Number of critic updates')
 
 parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
 
-parser.add_argument('--batch_size',          type=int, default=5,    help='Dimension of the batch')
+parser.add_argument('--batch_size',          type=int, default=1,    help='Dimension of the batch')
 parser.add_argument('--generated_samples',   type=int, default=4,    help='Number of generated samples for inspection')
 parser.add_argument('--latent_dim',          type=int, default=100,    help='Dimension of the latent space')
 parser.add_argument('--num_epochs',             type=int, default=5,    help='Number of epochs')
@@ -75,7 +75,6 @@ if __name__ == '__main__':
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     # device = torch.device("cpu")
     # generative model params
-    nz = 1
     ngf = 64
     # discriminative model params
     ng = 1
@@ -84,7 +83,7 @@ if __name__ == '__main__':
     latent_dim = args.latent_dim
   
     # set up the generator network
-    gen = Generative(nz, ng, ngf, latent_dim)
+    gen = Generative(ng, ngf, latent_dim)
     gen.to(device)
     # set up the discriminative models
     disc = Discriminative(ng, ndf)
@@ -93,8 +92,7 @@ if __name__ == '__main__':
     gen.apply(weights_init)
     disc.apply(weights_init)
 
-    # since sampling rate is 16 KHz we want sample_length milliseconds audio files 
-    sample_length = 5000
+
     # seq_len = 16 * sample_length
     seq_len = 16384
 
@@ -102,10 +100,7 @@ if __name__ == '__main__':
     trans = None
 
     # test dataloader
-    dataset = MusicDataset("dataset/piano",
-                                        seq_len = seq_len,
-                                        normalize = normalize,
-                                        transform=trans)
+    dataset = MusicDataset("dataset/piano", seq_len=seq_len, normalize=normalize, transform=trans)
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
@@ -117,8 +112,8 @@ if __name__ == '__main__':
         disc.load_state_dict(torch.load(disc_path, map_location=device))
    
     # test training
-    gen_optimizer = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.5, 0.9))
-    disc_optimizer = torch.optim.Adam(disc.parameters(), lr=1e-4, betas=(0.5, 0.9))
+    gen_optimizer = torch.optim.Adam(gen.parameters(), lr=args.gen_lr, betas=(0.5, 0.9))
+    disc_optimizer = torch.optim.Adam(disc.parameters(), lr=args.discr_lr, betas=(0.5, 0.9))
     # disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
 
     adversarial_loss = torch.nn.BCELoss()
@@ -180,8 +175,10 @@ if __name__ == '__main__':
 
             if(args.wgan >= 1):
 
-                for p in disc.parameters():
-                    p.requires_grad = True
+                # for p in disc.parameters():
+                #     p.requires_grad = True
+                # for p in gen.parameters():
+                #     p.requires_grad = False
 
                 disc_losses = []
                 for t in range(args.disc_updates):

@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import torchaudio
+import librosa
 import os
 from pathlib import Path
 import numpy as np
@@ -41,7 +42,8 @@ class MusicDataset(Dataset):
         dataset_chunks = []
 
         for song in songs:
-
+            
+            # let's exploit torchaudio to read songs' info
             data = torchaudio.info(song)
 
             # get the number of chunks in the audio file
@@ -91,6 +93,10 @@ def song_loader(chunk_info, seq_len, normalize=True):
 
     # data is loaded as a tensor
     song, _ = torchaudio.load(chunk_info['path'], num_frames=seq_len, offset=seq_len*chunk_info['idx'])
+
+    # let's load the chunk
+    # song, _ = librosa.load(chunk_info['path'], sr=16000, offset=seq_len*chunk_info['idx'], duration=seq_len)
+    # print(type(song), song.shape)
    
 
     return song

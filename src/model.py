@@ -45,7 +45,7 @@ def weights_init(m):
     #     nn.init.constant_(m.bias.data, 0)
 
 class Generative(nn.Module):
-    def __init__(self, nz=256 , ng=256, ngf=64, latent_dim=100):
+    def __init__(self, ng=1, ngf=64, latent_dim=100):
 
         super(Generative, self).__init__()
         
@@ -88,11 +88,46 @@ class Generative(nn.Module):
         x = self.main(x)
 
         return x
+
+class PhaseShuffle(nn.Module):
+    def __init__(self, shift_factor=2):
+
+        super(PhaseShuffle, self).__init__()
+        self.shift_factor = shift_factor
+    
+    def forward(self, x):
+
+        seq_len = x.shape[-1]
+        random_shift = torch.randint(low = 0, high= 3, size=(x.shape[0],))
+  
+        abs_shift = torch.abs(random_shift)
+
+        shifted_batch = []
+        for idx in range(x.shape[0]):
+
+            current_shift = abs_shift[idx]
+            sample = torch.unsqueeze(x[idx], dim=0)
+ 
+            if (abs_shift[idx] == 0):
+                shifted = sample
+            elif (abs_shift[idx] > 0):
+                padded = torch.nn.functional.pad(sample, (current_shift, 0), mode='circular')
+                shifted = torch.narrow(padded, dim=-1, start=0, length=seq_len)
+            else:
+                padded = torch.nn.functional.pad(sample, (0, current_shift), mode='circular')
+                shifted = torch.narrow(padded, dim=-1, start=x.shape[-1] - seq_len, length=seq_len)
+ 
+            shifted_batch.append(shifted)
+
+        x = torch.cat(shifted_batch, dim=0)
+
+        return x
+
         
 
 class Discriminative(nn.Module):
     
-    def __init__(self, ng=256, ndf=64):
+    def __init__(self, ng=1, ndf=64):
 
         super(Discriminative, self).__init__()
 
@@ -102,21 +137,52 @@ class Discriminative(nn.Module):
 
             nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
+            PhaseShuffle(shift_factor=2),
 
             nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
+            PhaseShuffle(shift_factor=2),
 
             nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
+            PhaseShuffle(shift_factor=2),
 
             nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
+            PhaseShuffle(shift_factor=2),
+            
             # state size. (ndf*8) x 4 x 4
             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Flatten(),
             nn.Linear(ndf*256, 1)
         )
+    
+    # def __init__(self, ng=1, ndf=64):
+
+    #     super(Discriminative, self).__init__()
+
+    #     self.ndf = ndf
+
+    #     self.main = nn.Sequential(
+
+    #         nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
+    #         nn.LeakyReLU(0.2, inplace=True),
+
+    #         nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True),
+    #         nn.LeakyReLU(0.2, inplace=True),
+
+    #         nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True),
+    #         nn.LeakyReLU(0.2, inplace=True),
+
+    #         nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
+    #         nn.LeakyReLU(0.2, inplace=True),
+    #         # state size. (ndf*8) x 4 x 4
+    #         nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
+    #         nn.LeakyReLU(0.2, inplace=True),
+    #         nn.Flatten(),
+    #         nn.Linear(ndf*256, 1)
+    #     )
 
 
     def forward(self, x):
@@ -238,12 +304,12 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     # computing the critic of real samples
     D_real = disc(batch)
     D_real = D_real.mean()
-    # D_real.backward(n_one)
+    D_real.backward(n_one)
 
     # computing the critic of fake samples
-    D_fake = disc(fake_batch)
+    D_fake = disc(fake_batch.detach())
     D_fake = D_fake.mean()
-    # D_fake.backward(one)
+    D_fake.backward(one)
 
     # computing the gp loss
     interpolation = epsilon * batch + (1-epsilon) * fake_batch
@@ -255,21 +321,11 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     gradients = gradients.view(gradients.size(0),  -1)
     gradient_norm = gradients.norm(2, dim=1)
     gp = ((gradient_norm - 1)**2)
-    # D_interpolation = D_interpolation.mean()
     gp = lmbda * gp.mean()
+    gp.backward(one)
 
-    # gp.backward(one)
-
-
-
-    # grad = torch.autograd.grad(midpoint_critic, u, grad_outputs= torch.ones_like(midpoint_critic).to(device))
-    # grad_norm = torch.norm(grad[0], 2, dim=1)
-    
-    # gp = torch.pow(grad_norm - 1, 2)
-    # midpoint_critic = midpoint_critic.mean()
-    # gp = gp.mean() 
     loss = D_fake - D_real + gp
-    loss.backward()
+    # loss.backward()
 
     # gathering the loss and updating
     disc_optimizer.step()
@@ -284,90 +340,15 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
 
     return loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom
 
-#     # def optimize_disc(true_loss, fake_loss, gp_loss, disc_optimizer):
-#     #     true_loss = true_loss.mean()
-#     #     fake_loss = fake_loss.mean()
-#     #     gp_loss = lamb * gp_loss.mean()
-
-#     #     disc_loss = fake_loss - true_loss + gp_loss
-#     #     disc_optimizer.step()
-
-# def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
-
-#     ############################
-#     # (2) Update D network
-#     ###########################
-
-#     disc_optimizer.zero_grad()
-
-#     # getting the batch size
-#     batch_size = batch.shape[0] 
-
-#     # vectors of 1's and -1's
-#     one = torch.tensor(1).float().to(device)
-#     n_one = -1 * one
-    
-#     # sampling random variables
-#     epsilon = torch.rand((batch_size, 1, 1), device=device)
-#     rnd_assgn = torch.randn((batch_size, 1, latent_dim), device=device)
-
-#     # computing the batch
-#     fake_batch = gen(rnd_assgn)
-    
-#     interpolation = epsilon * batch + (1-epsilon) * fake_batch
-
-#     # computing the critic of real samples
-#     D_real = disc(batch)
-#     D_real = D_real.mean()
-#     D_real.backward(n_one)
-
-#     # computing the critic of fake samples
-#     D_fake = disc(fake_batch)
-#     D_fake = D_fake.mean()
-#     D_fake.backward(one) 
-
-#     # computing the gp loss
-#     D_interpolation = disc(interpolation)
-#     gradients = torch.autograd.grad(outputs=D_interpolation, inputs=interpolation,
-#                               grad_outputs=torch.ones_like(D_interpolation).to(device),
-#                               create_graph=True, retain_graph=True, only_inputs=True)[0]
-#     gradients = gradients.view(gradients.size(0),  -1)
-#     gradient_norm = gradients.norm(2, dim=1)
-#     gp = ((gradient_norm - 1)**2)
-#     D_interpolation = D_interpolation.mean()
-#     gp = lmbda * gp.mean()
-
-#     gp.backward(one)
-
-
-    
-
-#     # grad = torch.autograd.grad(midpoint_critic, u, grad_outputs= torch.ones_like(midpoint_critic).to(device))
-#     # grad_norm = torch.norm(grad[0], 2, dim=1)
-    
-#     # gp = torch.pow(grad_norm - 1, 2)
-#     # midpoint_critic = midpoint_critic.mean()
-#     # gp = gp.mean() 
-#     loss = D_fake - D_real + gp
-#     # loss.backward()
-#     # gathering the loss and updating
-#     disc_optimizer.step()
-        
-#     # renaming
-#     D_x = D_real
-#     D_G_z1 = D_fake
-#     D_G_z2 = gp
-    
-#     disc_top = disc.main[0].weight.grad.norm()
-#     disc_bottom = disc.main[-1].weight.grad.norm()
-
-#     return loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom
 
 
 def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
 
-    for p in disc.parameters():
-        p.requires_grad = False
+    # for p in disc.parameters():
+    #     p.requires_grad = False
+
+    # for p in gen.parameters():
+    #     p.requires_grad = True
 
     # zero the gradient
     gen.zero_grad()
