@@ -32,7 +32,7 @@ parser.add_argument('--latent_dim',          type=int, default=100,    help='Dim
 parser.add_argument('--num_epochs',             type=int, default=5,    help='Number of epochs')
 
 parser.add_argument('--save',             type=bool, default=True,    help='Save the generator and discriminator models')
-parser.add_argument('--save_interleaving',type=int, default=2,       help='Number of epochs between backups')
+parser.add_argument('--save_interleaving',type=int, default=20,       help='Number of epochs between backups')
 
 parser.add_argument('--out_dir',          type=str, default='models/',    help='Folder where to save the model')
 parser.add_argument('--prod_dir',          type=str, default='produced/',    help='Folder where to save the model')
@@ -118,7 +118,7 @@ if __name__ == '__main__':
    
     # test training
     gen_optimizer = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.5, 0.9))
-    disc_optimizer = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.5, 0.9))
+    disc_optimizer = torch.optim.Adam(disc.parameters(), lr=1e-4, betas=(0.5, 0.9))
     # disc_optimizer = torch.optim.SGD(disc.parameters(), lr=args.discr_lr)
 
     adversarial_loss = torch.nn.BCELoss()
@@ -163,8 +163,9 @@ if __name__ == '__main__':
 
         # Iterate batches
         data_iter = iter(dataloader)
+        epoch_batches = len(data_iter)//5
         i = -1
-        while i < len(dataloader) and i < 9:
+        for i in range(epoch_batches):
 
             
 
@@ -182,11 +183,14 @@ if __name__ == '__main__':
                 for p in disc.parameters():
                     p.requires_grad = True
 
+                disc_losses = []
                 for t in range(args.disc_updates):
                     batch_sample = data_iter.next()
-                    i += 1
                     batch = batch_sample.to(device)
                     disc_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom = train_disc(gen, disc, batch, 10, disc_optimizer, latent_dim, device)
+                    disc_losses.append(disc_loss.item())
+                
+                disc_loss = np.mean(np.asarray(disc_losses))
                     
                 gen_loss, gen_top, gen_bottom = train_gen(gen, disc, batch, gen_optimizer, latent_dim, device)
 
@@ -211,7 +215,7 @@ if __name__ == '__main__':
             gen_bottom_grad.append(gen_bottom)
 
             end = time.time()
-            print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]" % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader), disc_loss, gen_loss, D_x, D_G_z1, D_G_z2))
+            print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D(x): %f, D(G(Z)): %f / %f]" % (end-start, epoch + 1, args.num_epochs, i*5+1, len(dataloader), disc_loss, gen_loss, D_x, D_G_z1, D_G_z2))
 
             if args.save and ((i+1) % 5000 == 0) :
             
