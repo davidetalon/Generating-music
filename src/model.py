@@ -98,28 +98,30 @@ class PhaseShuffle(nn.Module):
     def forward(self, x):
 
         seq_len = x.shape[-1]
-        random_shift = torch.randint(low = 0, high= 3, size=(x.shape[0],))
+        random_shift = torch.randint(low = 0, high= 3, size=(x.shape[0],), device=torch.device("cuda"))
   
         abs_shift = torch.abs(random_shift)
 
-        shifted_batch = []
-        for idx in range(x.shape[0]):
+        shifted_batch = torch.empty(x.size(),device=torch.device("cuda") )
+        for idx, sample in enumerate(torch.split(x, 1, dim=0)):
 
             current_shift = abs_shift[idx]
-            sample = torch.unsqueeze(x[idx], dim=0)
+            # sample = torch.unsqueeze(sample, dim=0)
  
             if (abs_shift[idx] == 0):
                 shifted = sample
             elif (abs_shift[idx] > 0):
+                # shifted = torch.empty(sample.size(), device=torch.device("cuda"))
                 padded = torch.nn.functional.pad(sample, (current_shift, 0), mode='circular')
                 shifted = torch.narrow(padded, dim=-1, start=0, length=seq_len)
             else:
                 padded = torch.nn.functional.pad(sample, (0, current_shift), mode='circular')
                 shifted = torch.narrow(padded, dim=-1, start=x.shape[-1] - seq_len, length=seq_len)
  
-            shifted_batch.append(shifted)
+            shifted_batch[idx] = shifted
 
-        x = torch.cat(shifted_batch, dim=0)
+        # # x = torch.cat(shifted_batch, dim=0)
+        # x = shifted_batch
 
         return x
 
