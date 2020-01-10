@@ -61,33 +61,25 @@ class Generative(nn.Module):
 
         main = nn.Sequential(
 
-            # nn.ConvTranspose1d( 32 * ngf, ngf * 16, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            # nn.ReLU(inplace=True),
-
             nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(inplace=True),
-            # nn.Dropout(0.5),
+    
             # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(inplace=True),
-            # nn.Dropout(0.5),
 
             # # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(inplace=True),
-            # nn.Dropout(0.5),
 
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(inplace=True),
-            # nn.Dropout(0.5),
 
             # state size. (ngf) x 32 x 32
             nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.Tanh(),
 
-            # nn.Softmax(dim=1)
-            # state size. (nc) x 64 x 64
         )
 
         if extended_seq:
@@ -100,8 +92,7 @@ class Generative(nn.Module):
             list_of_layers = list(extra_layer.children())
             list_of_layers.extend(list(main.children()))
             main = nn.Sequential (*list_of_layers)
-            # main = extra_layer + main
-
+        
         self.main = main
 
         if post_proc:
@@ -128,8 +119,6 @@ class Generative(nn.Module):
                 pad_right = pad_left
             x = nn.functional.pad(x, (pad_left, pad_right))
             x = self.post_proc_layer(x)
-
-
 
         return x
 
@@ -230,6 +219,8 @@ class Discriminative(nn.Module):
         list_of_layers.extend(list(final_block.children()))
         self.main = nn.Sequential (*list_of_layers)
 
+        self.squashing_layer = nn.Sigmoid()
+
     
     # def __init__(self, ng=1, ndf=64):
 
@@ -264,6 +255,7 @@ class Discriminative(nn.Module):
 
     def forward(self, x):
         x = self.main(x)
+        x = self.squashing_layer(x)
 
         return x
         
@@ -326,7 +318,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent
     D_G_z1 = output.mean().item()
 
     disc_top = disc.main[0].weight.grad.norm()
-    disc_bottom = disc.linear[-1].weight.grad.norm()
+    disc_bottom = disc.main[-1].weight.grad.norm()
 
     disc_loss = (real_loss + fake_loss)/2
 

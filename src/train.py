@@ -162,27 +162,14 @@ if __name__ == '__main__':
 
         # Iterate batches
         data_iter = iter(dataloader)
-        epoch_batches = len(data_iter)//5
+        epoch_batches = len(data_iter)//(5 if args.wgan>=1 else 1)
         i = -1
         for i in range(epoch_batches):
 
             
-
-        # for i, batch_sample in enumerate(dataloader):
-           
-            # batch_sample = data_iter.next()
-            # i += 1
-            # batch = batch_sample.to(device)
-
-            # Update network
             start = time.time()
 
             if(args.wgan >= 1):
-
-                # for p in disc.parameters():
-                #     p.requires_grad = True
-                # for p in gen.parameters():
-                #     p.requires_grad = False
 
                 disc_losses = []
                 for t in range(args.disc_updates):
@@ -197,7 +184,9 @@ if __name__ == '__main__':
 
                 real_loss = fake_loss = 0        
             else:
-                gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
+                batch_sample = data_iter.next()
+                batch = batch_sample.to(device)
+                gen_loss, real_loss, fake_loss, disc_loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
                 batch, adversarial_loss, disc_optimizer, gen_optimizer, latent_dim, device, replay_memory)
             
             # train_batch(gen, disc, batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
@@ -210,8 +199,8 @@ if __name__ == '__main__':
             D_x_history.append(D_x)
             D_G_z1_history.append(D_G_z1)
             D_G_z2_history.append(D_G_z2)
-            discr_top_grad.append(discr_top)
-            discr_bottom_grad.append(discr_bottom)
+            discr_top_grad.append(disc_top)
+            discr_bottom_grad.append(disc_bottom)
             gen_top_grad.append(gen_top)
             gen_bottom_grad.append(gen_bottom)
 
