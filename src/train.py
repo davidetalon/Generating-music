@@ -24,6 +24,7 @@ parser.add_argument('--gen_lr',          type=float, default=1e-4,    help=' Gen
 parser.add_argument('--discr_lr',        type=float, default=1e-4,    help=' Generator\'s learning rate')
 parser.add_argument('--wgan',            type=int,   default=0,         help='Choose to train with wgan or vanilla-gan')
 parser.add_argument('--disc_updates',    type=int,   default=5,         help='Number of critic updates')
+parser.add_argument('--post_proc',       type=int,   default=1,         help='Choose to apply post processing to generated samples')
 
 parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
 
@@ -82,9 +83,10 @@ if __name__ == '__main__':
     ndf = 64
     extended_seq = True if args.extended_seq >=1 else False
     latent_dim = args.latent_dim
+    post_proc = True if args.post_proc >=1 else False
   
     # set up the generator network
-    gen = Generative(ng, ngf, extended_seq=extended_seq, latent_dim=args.latent_dim)
+    gen = Generative(ng, ngf, extended_seq=extended_seq, latent_dim=args.latent_dim, post_proc=post_proc)
     gen.to(device)
     # set up the discriminative models
     disc = Discriminative(ng, ndf, extended_seq=extended_seq)

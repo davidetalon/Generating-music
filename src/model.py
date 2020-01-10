@@ -45,7 +45,7 @@ def weights_init(m):
     #     nn.init.constant_(m.bias.data, 0)
 
 class Generative(nn.Module):
-    def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100):
+    def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True):
 
         super(Generative, self).__init__()
         self.extended_seq = extended_seq
@@ -55,6 +55,7 @@ class Generative(nn.Module):
         else:
             self.linear = nn.Linear(latent_dim, 256*ngf)
         self.ngf = ngf
+        self.post_proc = post_proc
         
 
 
@@ -103,6 +104,10 @@ class Generative(nn.Module):
 
         self.main = main
 
+        if post_proc:
+            self.post_proc_filter_len = 512
+            self.post_proc_layer = nn.Conv1d(ng, ng, self.post_proc_filter_len)
+
     
     def forward(self, x):
         x = self.linear(x)
@@ -114,55 +119,50 @@ class Generative(nn.Module):
 
         x = self.main(x)
 
+        if self.post_proc:
+            if (self.post_proc_filter_len % 2) == 0:
+                pad_left = self.post_proc_filter_len // 2
+                pad_right = pad_left - 1
+            else:
+                pad_left = (self.post_proc_filter_len - 1) // 2
+                pad_right = pad_left
+            x = nn.functional.pad(x, (pad_left, pad_right))
+            x = self.post_proc_layer(x)
+
 
 
         return x
 
 class PhaseShuffle(nn.Module):
+
     def __init__(self, shift_factor=2):
 
         super(PhaseShuffle, self).__init__()
         self.shift_factor = shift_factor
-    
+
     def forward(self, x):
 
         seq_len = x.shape[-1]
-        random_shift = torch.randint(low = -self.shift_factor, high= self.shift_factor, size=(x.shape[0],))
+        random_shift = torch.randint(low = 0, high= 3, size=(x.shape[0],))
   
         abs_shift = torch.abs(random_shift)
 
-        shifted_batch = torch.empty(x.size() )
+        shifted_batch = torch.empty(x.size())
         for idx, sample in enumerate(torch.split(x, 1, dim=0)):
 
-            # current_shift = abs_shift[idx]
-        
+            current_shift = abs_shift[idx]
             # sample = torch.unsqueeze(sample, dim=0)
-            # print(sample.shape)
  
             if (abs_shift[idx] == 0):
                 shifted = sample
-            elif (random_shift[idx] > 0):
-                shifted = torch.empty(sample.size())
-                # padded = torch.nn.functional.pad(sample, (current_shift, 0), mode='circular')
-                shifted[:,:, :abs_shift[idx]] = torch.narrow(sample, dim=-1, start=(x.shape[-1] - abs_shift[idx]), length=abs_shift[idx])
-                # print(torch.narrow(sample, dim=-1, start=(x.shape[-1] - abs_shift[idx]), length=abs_shift[idx]).shape)
-                # ciao = torch.narrow(sample, dim=-1, start=(x.shape[-1] - abs_shift[idx]), length=abs_shift[idx])
-                shifted[:,:,abs_shift[idx]:] = torch.narrow(sample, dim=-1, start=0, length=(seq_len - abs_shift[idx]))
-
-                # print("non-shifted: ", sample[0,0,:4].data, sample[0,0,-6:].data)
-                # print("shifted: ", shifted[0,0,:4].data, shifted[0,0,-4:].data)
+            elif (abs_shift[idx] > 0):
+                # shifted = torch.empty(sample.size(), device=torch.device("cuda"))
+                padded = torch.nn.functional.pad(sample, (current_shift, 0), mode='circular')
+                shifted = torch.narrow(padded, dim=-1, start=0, length=seq_len)
             else:
-                shifted = torch.empty(sample.size())
-                shifted[:,:, -abs_shift[idx]:] = torch.narrow(sample, dim=-1, start=0, length=abs_shift[idx])
-                # padded = torch.nn.functional.pad(sample, (0, current_shift), mode='circular')
-                # shifted[:,:, shifted[:,:, :abs_shift[idx]] = torch.narrow(sample, dim=-1, start=(x.shape[-1] - abs_shift[idx]), length=abs_shift[idx]):abs_shift[idx]] = torch.narrow(sample, dim=-1, start=(x.shape[-1] - abs_shift[idx]), length=abs_shift[idx])
-                # shifted = torch.narrow(padded, dim=-1, start=x.shape[-1] - seq_len, length=seq_len)
-                # print("sample", sample.shape)
-                # print("padding", torch.narrow(sample, dim=-1, start=0, length=abs_shift[idx]).shape)
-                # print("copying", torch.narrow(sample, dim=-1, start=0, length=(seq_len - abs_shift[idx])).shape)
-                shifted[:,:,:-abs_shift[idx]] = torch.narrow(sample, dim=-1, start=abs_shift[idx], length=(seq_len - abs_shift[idx]))
-                # print("non-shifted: ", sample[0,0,:6].data, sample[0,0,-4:].data)
-                # print("shifted: ", shifted[0,0,:4].data, shifted[0,0,-4:].data)
+                padded = torch.nn.functional.pad(sample, (0, current_shift), mode='circular')
+                shifted = torch.narrow(padded, dim=-1, start=x.shape[-1] - seq_len, length=seq_len)
+ 
             shifted_batch[idx] = shifted
 
         # # x = torch.cat(shifted_batch, dim=0)
