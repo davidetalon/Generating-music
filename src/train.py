@@ -223,7 +223,7 @@ if __name__ == '__main__':
 
 
         end_epoch = time.time()
-        print("\033[92m Epoch %d completed, time %d s \033[0m" %(epoch, end_epoch - start_epoch))
+        print("\033[92m Epoch %d completed, time %d s \033[0m" %(epoch + 1, end_epoch - start_epoch))
 
         if args.save and ((epoch+1) % args.save_interleaving == 0):
             save_models(date, ckp_dir, gen_file_name, disc_file_name)
