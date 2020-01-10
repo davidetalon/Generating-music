@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser(description='Train the GAN for generating Piano
 
 # seed
 parser.add_argument('--seed',            type=int, default=30,    help=' Seed for the generation process')
+parser.add_argument('--extended_seq',    type=int,   default=0,         help='Choose the seq_len 16384/65536')
 parser.add_argument('--gen_lr',          type=float, default=1e-4,    help=' Generator\'s learning rate')
 parser.add_argument('--discr_lr',        type=float, default=1e-4,    help=' Generator\'s learning rate')
 parser.add_argument('--wgan',            type=int,   default=0,         help='Choose to train with wgan or vanilla-gan')
@@ -79,14 +80,14 @@ if __name__ == '__main__':
     # discriminative model params
     ng = 1
     ndf = 64
-
+    extended_seq = True if args.extended_seq >=1 else False
     latent_dim = args.latent_dim
   
     # set up the generator network
-    gen = Generative(ng, ngf, latent_dim)
+    gen = Generative(ng, ngf, extended_seq=extended_seq, latent_dim=args.latent_dim)
     gen.to(device)
     # set up the discriminative models
-    disc = Discriminative(ng, ndf)
+    disc = Discriminative(ng, ndf, extended_seq=extended_seq)
     disc.to(device)
 
     gen.apply(weights_init)
@@ -95,7 +96,8 @@ if __name__ == '__main__':
 
     # seq_len = 16 * sample_length
     seq_len = 16384
-
+    if extended_seq:
+        seq_len = seq_len * 4
     normalize = True
     trans = None
 

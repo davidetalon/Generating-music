@@ -45,14 +45,23 @@ def weights_init(m):
     #     nn.init.constant_(m.bias.data, 0)
 
 class Generative(nn.Module):
-    def __init__(self, ng=1, ngf=64, latent_dim=100):
+    def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100):
 
         super(Generative, self).__init__()
-        
-        self.linear = nn.Linear(latent_dim, 256*ngf)
-        self.ngf = ngf
+        self.extended_seq = extended_seq
 
-        self.main = nn.Sequential(
+        if self.extended_seq:
+            self.linear = nn.Linear(latent_dim, 256*2*ngf)
+        else:
+            self.linear = nn.Linear(latent_dim, 256*ngf)
+        self.ngf = ngf
+        
+
+
+        main = nn.Sequential(
+
+            # nn.ConvTranspose1d( 32 * ngf, ngf * 16, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
+            # nn.ReLU(inplace=True),
 
             nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(inplace=True),
@@ -80,12 +89,32 @@ class Generative(nn.Module):
             # state size. (nc) x 64 x 64
         )
 
+        if extended_seq:
+            extra_layer = nn.Sequential(
+                nn.ConvTranspose1d( 32 * ngf, ngf * 16, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
+                nn.ReLU(inplace=True),
+            )
+
+            # concatenate the two blocks
+            list_of_layers = list(extra_layer.children())
+            list_of_layers.extend(list(main.children()))
+            main = nn.Sequential (*list_of_layers)
+            # main = extra_layer + main
+
+        self.main = main
+
     
     def forward(self, x):
         x = self.linear(x)
         x = nn.ReLU()(x)
-        x = x.view(x.shape[0], 16 * self.ngf, 16)
+        if self.extended_seq:
+            x = x.view(x.shape[0], 2 * 16 * self.ngf, 16)
+        else:
+            x = x.view(x.shape[0], 16 * self.ngf, 16)
+
         x = self.main(x)
+
+
 
         return x
 
@@ -129,13 +158,16 @@ class PhaseShuffle(nn.Module):
 
 class Discriminative(nn.Module):
     
-    def __init__(self, ng=1, ndf=64):
+    def __init__(self, ng=1, ndf=64, extended_seq=False):
 
         super(Discriminative, self).__init__()
 
         self.ndf = ndf
+        self.extended_seq = extended_seq
 
-        self.main = nn.Sequential(
+
+
+        main = nn.Sequential(
 
             nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
@@ -152,13 +184,35 @@ class Discriminative(nn.Module):
             nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
             PhaseShuffle(shift_factor=2),
-            
+
             # state size. (ndf*8) x 4 x 4
             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Flatten(),
-            nn.Linear(ndf*256, 1)
         )
+
+        if self.extended_seq:
+            extra_block = nn.Sequential(
+            # state size. (ndf*8) x 4 x 4
+            nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True),
+            nn.LeakyReLU(0.2, inplace=True),
+            PhaseShuffle(shift_factor=2),
+            )
+
+            # concatenating the extra block
+            list_of_layers = list(main.children())
+            list_of_layers.extend(list(extra_block.children()))
+            main = nn.Sequential (*list_of_layers)
+
+        final_block = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(ndf*(512 if self.extended_seq else 256), 1)
+        )
+
+        # concatenating the final block
+        list_of_layers = list(main.children())
+        list_of_layers.extend(list(final_block.children()))
+        self.main = nn.Sequential (*list_of_layers)
+
     
     # def __init__(self, ng=1, ndf=64):
 
@@ -182,6 +236,10 @@ class Discriminative(nn.Module):
     #         # state size. (ndf*8) x 4 x 4
     #         nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
     #         nn.LeakyReLU(0.2, inplace=True),
+    #     )
+        
+    #     if ex
+    #     final_block = nn.Sequential(
     #         nn.Flatten(),
     #         nn.Linear(ndf*256, 1)
     #     )
