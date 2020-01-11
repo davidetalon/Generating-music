@@ -19,12 +19,14 @@ parser = argparse.ArgumentParser(description='Train the GAN for generating Piano
 
 # seed
 parser.add_argument('--seed',            type=int, default=30,    help=' Seed for the generation process')
-parser.add_argument('--extended_seq',    type=int,   default=0,         help='Choose the seq_len 16384/65536')
+
 parser.add_argument('--gen_lr',          type=float, default=1e-4,    help=' Generator\'s learning rate')
 parser.add_argument('--discr_lr',        type=float, default=1e-4,    help=' Generator\'s learning rate')
 parser.add_argument('--wgan',            type=int,   default=0,         help='Choose to train with wgan or vanilla-gan')
 parser.add_argument('--disc_updates',    type=int,   default=5,         help='Number of critic updates')
 parser.add_argument('--post_proc',       type=int,   default=1,         help='Choose to apply post processing to generated samples')
+parser.add_argument('--attention',       type=int,   default=1,         help='Choose to add attention or not')
+parser.add_argument('--extended_seq',    type=int,   default=0,         help='Choose the seq_len 16384/65536')
 
 parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
 
@@ -81,15 +83,16 @@ if __name__ == '__main__':
     # discriminative model params
     ng = 1
     ndf = 64
+
     extended_seq = True if args.extended_seq >=1 else False
     latent_dim = args.latent_dim
     post_proc = True if args.post_proc >=1 else False
   
     # set up the generator network
-    gen = Generative(ng, ngf, extended_seq=extended_seq, latent_dim=args.latent_dim, post_proc=post_proc)
+    gen = Generative(ng, ngf, extended_seq=extended_seq, latent_dim=args.latent_dim, post_proc=post_proc, attention=args.attention)
     gen.to(device)
     # set up the discriminative models
-    disc = Discriminative(ng, ndf, extended_seq=extended_seq)
+    disc = Discriminative(ng, ndf, extended_seq=extended_seq, attention=args.attention)
     disc.to(device)
 
     gen.apply(weights_init)
@@ -175,7 +178,7 @@ if __name__ == '__main__':
                 for t in range(args.disc_updates):
                     batch_sample = data_iter.next()
                     batch = batch_sample.to(device)
-                    disc_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom = train_disc(gen, disc, batch, 10, disc_optimizer, latent_dim, device)
+                    disc_loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom = train_disc(gen, disc, batch, 10, disc_optimizer, latent_dim, device)
                     disc_losses.append(disc_loss.item())
                 
                 disc_loss = np.mean(np.asarray(disc_losses))

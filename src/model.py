@@ -7,6 +7,38 @@ import torch
 # from random import randint
 import random
 
+class AttentionLayer(nn.Module):
+    def __init__(self, in_dim):
+
+        super(AttentionLayer, self).__init__()
+
+        self.value_conv = nn.Conv1d(in_channels = in_dim , out_channels = in_dim//8 , kernel_size= 1)
+        self.key_conv = nn.Conv1d(in_channels = in_dim, out_channels = in_dim//8, kernel_size= 1)
+        self.query_conv = nn.Conv1d(in_channels = in_dim, out_channels = in_dim//8 , kernel_size= 1)
+        self.conv = nn.Conv1d(in_channels = in_dim//8, out_channels = in_dim , kernel_size= 1)
+        
+        self.gamma = nn.Parameter(torch.zeros(1))
+        self.softmax = nn.Softmax(dim=-1)
+    
+    def forward(self, x):
+
+        fxi = self.value_conv(x)
+        gxj = self.key_conv(x)
+
+        sij = torch.bmm(fxi.permute(0,2,1), gxj)
+        betas = self.softmax(sij).permute(0,2,1)
+
+        hidden = self.query_conv(x)
+
+        output = torch.bmm(hidden, betas)
+        output = self.conv(output)
+
+        output = self.gamma * output + x
+
+        return output
+
+
+
 
 
 class ReplayMemory(object):
@@ -45,59 +77,67 @@ def weights_init(m):
     #     nn.init.constant_(m.bias.data, 0)
 
 class Generative(nn.Module):
-    def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True):
+
+    def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False):
 
         super(Generative, self).__init__()
+        self.ngf = ngf
         self.extended_seq = extended_seq
+        self.post_proc = post_proc
+        self.attention = attention
 
         if self.extended_seq:
             self.linear = nn.Linear(latent_dim, 256*2*ngf)
         else:
             self.linear = nn.Linear(latent_dim, 256*ngf)
-        self.ngf = ngf
-        self.post_proc = post_proc
-        
 
-
-        main = nn.Sequential(
+        main = [
 
             nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(inplace=True),
-    
+            
             # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
-            nn.ReLU(inplace=True),
-
-            # # state size. (ngf*4) x 8 x 8
+            nn.ReLU(inplace=True)
+        ]
+        
+        block2 = [
             nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(inplace=True),
+        ]
 
+        if attention:
+            main +=  [AttentionLayer(ngf * 4)]
+            main += block2
+            main += [AttentionLayer(ngf * 2)]
+        else:
+            main += block2
+
+        main += [
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.ReLU(inplace=True),
-
+            
             # state size. (ngf) x 32 x 32
             nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
             nn.Tanh(),
-
-        )
+        ]
 
         if extended_seq:
-            extra_layer = nn.Sequential(
+            extra_layer = [
                 nn.ConvTranspose1d( 32 * ngf, ngf * 16, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
                 nn.ReLU(inplace=True),
-            )
+            ]
+            
+            main = extra_layer + main
 
-            # concatenate the two blocks
-            list_of_layers = list(extra_layer.children())
-            list_of_layers.extend(list(main.children()))
-            main = nn.Sequential (*list_of_layers)
-        
-        self.main = main
+        # instantiate the model
+        self.main = nn.Sequential(*main)
 
         if post_proc:
             self.post_proc_filter_len = 512
             self.post_proc_layer = nn.Conv1d(ng, ng, self.post_proc_filter_len)
+
 
     
     def forward(self, x):
@@ -163,16 +203,16 @@ class PhaseShuffle(nn.Module):
 
 class Discriminative(nn.Module):
     
-    def __init__(self, ng=1, ndf=64, extended_seq=False):
+    def __init__(self, ng=1, ndf=64, extended_seq=False, attention=False):
 
         super(Discriminative, self).__init__()
 
+        self.ng = ng
         self.ndf = ndf
         self.extended_seq = extended_seq
+        self.attention = attention
 
-
-
-        main = nn.Sequential(
+        main = [
 
             nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
@@ -180,12 +220,23 @@ class Discriminative(nn.Module):
 
             nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
-            PhaseShuffle(shift_factor=2),
+            PhaseShuffle(shift_factor=2)
+        ]
 
+        block2 = [
             nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
             PhaseShuffle(shift_factor=2),
-
+        ]
+        
+        if attention:
+            main += [AttentionLayer(ndf * 2)]
+            main += block2
+            main += [AttentionLayer(ndf * 4)]
+        else:
+            main += block2
+        
+        main += [
             nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
             PhaseShuffle(shift_factor=2),
@@ -193,31 +244,26 @@ class Discriminative(nn.Module):
             # state size. (ndf*8) x 4 x 4
             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
-        )
+        ]
 
         if self.extended_seq:
-            extra_block = nn.Sequential(
+            extra_block = [
             # state size. (ndf*8) x 4 x 4
             PhaseShuffle(shift_factor=2),
             nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
+            ]
 
-            )
+            main += extra_block
 
-            # concatenating the extra block
-            list_of_layers = list(main.children())
-            list_of_layers.extend(list(extra_block.children()))
-            main = nn.Sequential (*list_of_layers)
 
-        final_block = nn.Sequential(
+        final_block = [
             nn.Flatten(),
             nn.Linear(ndf*(512 if self.extended_seq else 256), 1)
-        )
+        ]
+        main += final_block
 
-        # concatenating the final block
-        list_of_layers = list(main.children())
-        list_of_layers.extend(list(final_block.children()))
-        self.main = nn.Sequential (*list_of_layers)
+        self.main = nn.Sequential(*main)
 
         self.squashing_layer = nn.Sigmoid()
 
