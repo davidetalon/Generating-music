@@ -7,7 +7,7 @@ import numpy as np
 from dataset import MusicDataset, collate, OneHotEncoding, ToTensor, ToMulaw
 from model import Generative, Discriminative, train_batch, weights_init, ReplayMemory, train_disc, train_gen
 from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
+# from torchvision import transforms
 import json
 from pathlib import Path
 import scipy.io.wavfile
@@ -25,7 +25,7 @@ parser.add_argument('--discr_lr',        type=float, default=1e-4,    help=' Gen
 parser.add_argument('--wgan',            type=int,   default=0,         help='Choose to train with wgan or vanilla-gan')
 parser.add_argument('--disc_updates',    type=int,   default=5,         help='Number of critic updates')
 parser.add_argument('--post_proc',       type=int,   default=1,         help='Choose to apply post processing to generated samples')
-parser.add_argument('--attention',       type=int,   default=1,         help='Choose to add attention or not')
+parser.add_argument('--attention',       type=int,   default=0,         help='Choose to add attention or not')
 parser.add_argument('--extended_seq',    type=int,   default=0,         help='Choose the seq_len 16384/65536')
 
 parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     gen = Generative(ng, ngf, extended_seq=extended_seq, latent_dim=args.latent_dim, post_proc=post_proc, attention=args.attention)
     gen.to(device)
     # set up the discriminative models
-    disc = Discriminative(ng, ndf, extended_seq=extended_seq, attention=args.attention)
+    disc = Discriminative(ng, ndf, extended_seq=extended_seq, wgan=args.wgan, attention=args.attention)
     disc.to(device)
 
     gen.apply(weights_init)

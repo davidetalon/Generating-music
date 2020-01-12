@@ -203,13 +203,14 @@ class PhaseShuffle(nn.Module):
 
 class Discriminative(nn.Module):
     
-    def __init__(self, ng=1, ndf=64, extended_seq=False, attention=False):
+    def __init__(self, ng=1, ndf=64, extended_seq=False, wgan=False, attention=False):
 
         super(Discriminative, self).__init__()
 
         self.ng = ng
         self.ndf = ndf
         self.extended_seq = extended_seq
+        self.wgan = wgan
         self.attention = attention
 
         main = [
@@ -301,7 +302,8 @@ class Discriminative(nn.Module):
 
     def forward(self, x):
         x = self.main(x)
-        x = self.squashing_layer(x)
+        # if self.wgan:
+        #     x = self.squashing_layer(x)
 
         return x
         
