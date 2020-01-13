@@ -15,6 +15,15 @@ import time
 
 
 class MusicDataset(Dataset):
+    """Music dataset: get a dataset of fixed-sized chunks from audio files.
+    
+    Args:
+        source_filepath (String): root folder of the dataset.
+        seq_len (int): length of the chunks. Default: 512
+        normalize (bool): set if the normalization is required. Default: ``True``
+        transform (): tranformations to apply to samples. Default: ``None``
+
+    """
 
     def __init__(self, source_filepath, seq_len=512, normalize=True, transform = None):
 
@@ -87,6 +96,15 @@ class MusicDataset(Dataset):
         return sample
 
 def song_loader(chunk_info, seq_len, normalize=True):
+    """Load the audio chunk
+
+    Args:
+        chunk_info (key,value): dictionary containing file path and index of the chunk in the file
+        seq_len (int): length of the sequence
+        normalize (bool): set if the normalization is required. Default: ``True``
+
+    Returns: the loaded chunk
+    """
     # song = np.memmap(path, dtype="int8", mode='r')
 
     # sampling_rate, song = scipy.io.wavfile.read(path, mmap=False)
@@ -102,6 +120,11 @@ def song_loader(chunk_info, seq_len, normalize=True):
     return song
 
 class Normalize():
+    """Normalize a sample removing the mean and squashing it between [-1,1]
+
+    Args:
+        sample (tensor): sample to normalize
+    """
 
     def __call__(self, sample):
         sample = sample - sample.mean()
@@ -109,44 +132,46 @@ class Normalize():
 
         return sample
 
-class ToChunks():
-    def __init__(self, seq_len):
-        self.seq_len = seq_len
+# class ToChunks():
+#     def __init__(self, seq_len):
+#         self.seq_len = seq_len
 
-    def __call__(self, sample):
+#     def __call__(self, sample):
 
-        chunks = torch.split(sample, self.seq_len)
+#         chunks = torch.split(sample, self.seq_len)
 
-        return chunks
+#         return chunks
 
-class Crop_and_pad():
-    def __init__(self, target_len):
-        self.target_len = target_len
+# class Crop_and_pad():
+#     def __init__(self, target_len):
+#         self.target_len = target_len
 
-    def __call__(self, sample):
+#     def __call__(self, sample):
 
-        sample_len = len(sample)
-        mid_point = sample_len // 2
+#         sample_len = len(sample)
+#         mid_point = sample_len // 2
  
-        if(sample_len > self.target_len):
+#         if(sample_len > self.target_len):
 
-            # center crop
-            start = mid_point - (self.sample_len//2)
-            chunk = sample[start:start + self.target_len]
-        elif(sample_len < self.target_len):
+#             # center crop
+#             start = mid_point - (self.sample_len//2)
+#             chunk = sample[start:start + self.target_len]
+#         elif(sample_len < self.target_len):
 
-            # zero padding to target
-            start = (self.target_len - sample_len)//2
-            end = int(math.ceil((self.target_len - sample_len)/2))
-            # print(start, end)
-            chunk = np.array(sample)
-            chunk = np.pad(chunk, (start, end), 'linear_ramp')
+#             # zero padding to target
+#             start = (self.target_len - sample_len)//2
+#             end = int(math.ceil((self.target_len - sample_len)/2))
+#             # print(start, end)
+#             chunk = np.array(sample)
+#             chunk = np.pad(chunk, (start, end), 'linear_ramp')
 
-        # print(chunk)
-        return chunk
+#         # print(chunk)
+#         return chunk
 
 
 def encode_one_hot(sample):
+    # with mu-law we have values bewteen -127 and 128, therefore to pass to a one-hot encoding we must
+    # set to 1 the element associated to the indicated value: value + 127.
     sample = torch.squeeze(sample)
     encoded = torch.zeros((sample.shape[0], 256))
     for i in range(sample.shape[0]):
@@ -154,8 +179,14 @@ def encode_one_hot(sample):
     return encoded
 
 class OneHotEncoding():
-    # with mu-law we have values bewteen -127 and 128, therefore to pass to a one-hot encoding we must
-    # set to 1 the element associated to the indicated value: value + 127.
+    """ Apply one-hot encoding to the tensor
+
+    Args:
+        sample (tensor): tensor to transform with one-hot encoding
+    
+    Returns:
+        the one-hot encoded tensor
+    """
     def __call__(self, sample):
 
         encoded_onehot = encode_one_hot(sample)
@@ -163,6 +194,14 @@ class OneHotEncoding():
         return encoded_onehot
 
 class ToMulaw():
+    """ Apply Mulaw quantization to the sample
+
+    Args:
+        sample (tensor): tensor to transform with Mulaw quantization
+    
+    Returns:
+        the quantized sample
+    """
 
     def __call__(self, sample):
 
@@ -171,6 +210,14 @@ class ToMulaw():
         return sample
 
 class ToTensor():
+    """ Transform to a tensor
+
+    Args:
+        sample (ndarray, list): sample to wrap in a tensor
+
+    Returns:
+        the tensor version of the input
+    """
     def __call__(self, sample):
         # Convert songs to tensor
         tensor = torch.tensor(sample).float()
@@ -179,22 +226,22 @@ class ToTensor():
         return tensor
 
 
-class collate():
-    def __call__(self, batch):
+# class collate():
+#     def __call__(self, batch):
 
-        # we need to collate the batch 
-        # in the considered batch each source sequence must have the same size
-        # pad with respect to max source sequence size, the same for target sequences. Stack together
+#         # we need to collate the batch 
+#         # in the considered batch each source sequence must have the same size
+#         # pad with respect to max source sequence size, the same for target sequences. Stack together
 
-        # pad source sequences
-        sequences = [seq for seq in batch]
-        seq_lengths = [len(seq) for seq in sequences]
-        padded_sequences = pad_sequence(sequences, batch_first=False)
+#         # pad source sequences
+#         sequences = [seq for seq in batch]
+#         seq_lengths = [len(seq) for seq in sequences]
+#         padded_sequences = pad_sequence(sequences, batch_first=False)
 
        
 
-        # stack together source and target sequences
-        return padded_sequences
+#         # stack together source and target sequences
+#         return padded_sequences
 
 if __name__ == "__main__":
 

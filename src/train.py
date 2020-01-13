@@ -45,12 +45,29 @@ parser.add_argument('--metrics_dir',          type=str, default='metrics/',    h
 
 parser.add_argument('--model_path',          type=str, default='',    help='Path to models to restore')
 
+
 def save_models(date, ckp_dir, gen_file_name, disc_file_name):
+    """Save the model parameters
+
+    Args:
+        date (String): date for the name of the model to save.
+        ckp_dir (String): directory path where to save files
+        gen_file_name (String): generator model name
+        disc_file_name (String): discriminator model name
+    """
     print("Backing up the discriminator and generator models")
     torch.save(gen.state_dict(), ckp_dir / gen_file_name)
     torch.save(disc.state_dict(), ckp_dir / disc_file_name)
 
 def sample_fake(latent, date, epoch, prod_dir):
+    """Generate samples from the latent and save them as wav files
+
+    Args:
+        latent (Tensor): tensor of the noise to map.
+        date (String): date for the name of the samples to save
+        epoch (int): epoch of generation
+        prod_dir (Path): directory path where to save files
+    """
 
     with torch.no_grad():
         print("Sampling from generator distribution: store samples for inspection.")

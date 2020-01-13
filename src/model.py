@@ -4,10 +4,15 @@ from torch import nn
 import numpy as np
 import time
 import torch
-# from random import randint
 import random
 
 class AttentionLayer(nn.Module):
+    """Attention layer of the SAGAN model.
+
+    Args:
+        in_dim (int): number of channels of the input
+    """
+
     def __init__(self, in_dim):
 
         super(AttentionLayer, self).__init__()
@@ -38,10 +43,13 @@ class AttentionLayer(nn.Module):
         return output
 
 
-
-
-
 class ReplayMemory(object):
+    """Replay memory for storing latest-generated samples. Samples are stored with a FIFO policy.
+    A random sampling is performing when retrieving from it.
+    
+    Args:
+        capacity (int): capacity of the memory. Default: 512.
+    """
 
     def __init__(self, capacity = 512):
         self.capacity = capacity
@@ -50,6 +58,12 @@ class ReplayMemory(object):
         self.position = 0
 
     def push(self, batch):
+        """Push a batch into the memory
+
+        Args:
+            batch (tensor): tensor to push into the memory
+
+        """
         split = torch.split(batch, 1, dim=0)
         if len(self.memory) < self.capacity:
             self.memory.append(None)
@@ -57,6 +71,14 @@ class ReplayMemory(object):
         self.position = (self.position + batch.shape[0]) % self.capacity
 
     def sample(self, batch_size):
+        """Randomly draw a batch_size of samples from the memory.
+
+        Args:
+            batch_size (int): number of sample to draw.
+
+        Returns:
+            Drawn samples.
+        """ 
         sampled = random.sample(self.memory, batch_size)
         concatenated = torch.cat(sampled, dim=0)
         # concatenated = torch.unsqueeze(concatenated, dim=1)
@@ -66,6 +88,7 @@ def weights_init(m):
     """
         Initialize the network: convolutional and batchnorm layers are initialized with 
         values coming from a Normal distribution with mean 0 and variance 0.02. Biases are set to 0.
+
         Args:
             m: layer to initialize.
     """
@@ -77,6 +100,16 @@ def weights_init(m):
     #     nn.init.constant_(m.bias.data, 0)
 
 class Generative(nn.Module):
+    """Generative model which maps from noise in the latent space to samples in the data space.
+
+    Args:
+        ng (int): number of channels of the data space (generated samples). Default: 1.
+        ngf (int): dimensionality factor of the generator. Default: 64.
+        extended_seq (bool): set if extended sequences are required. Default: ``False``.
+        latent_dim (int): number of channels of the latent space. Default: 100.
+        post_proc (bool): set if the post processing is required. Default: ``True``.
+        attention (bool): set if apply attention. Default: ``False``.
+    """
 
     def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False):
 
@@ -163,6 +196,11 @@ class Generative(nn.Module):
         return x
 
 class PhaseShuffle(nn.Module):
+    """Phase Shuffle layer as described by https://arxiv.org/pdf/1802.04208.pdf
+
+    Args:
+        shift_factor: absolute value of the maximum shift allowed. Default: 2.
+    """
 
     def __init__(self, shift_factor=2):
 
@@ -202,7 +240,16 @@ class PhaseShuffle(nn.Module):
         
 
 class Discriminative(nn.Module):
-    
+    """Discriminative model of the gan: could act as critic or catch fake samples depending on the training algorithm.
+
+    Args:
+        ng (int): number of channels of the data space (generated samples). Default: 1.
+        ndf (ndf): dimensionality factor of the discriminator. Default: 64.
+        extended_seq (bool): extended_seq (bool): set if extended sequences are required. Default: ``False``.
+        wgan (bool): set if wgan is used as training algorithm. Default: ``False``.
+        attention (bool): set if apply attention. Default: ``False``.
+    """
+
     def __init__(self, ng=1, ndf=64, extended_seq=False, wgan=False, attention=False):
 
         super(Discriminative, self).__init__()
@@ -269,37 +316,6 @@ class Discriminative(nn.Module):
         self.squashing_layer = nn.Sigmoid()
 
     
-    # def __init__(self, ng=1, ndf=64):
-
-    #     super(Discriminative, self).__init__()
-
-    #     self.ndf = ndf
-
-    #     self.main = nn.Sequential(
-
-    #         nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
-    #         nn.LeakyReLU(0.2, inplace=True),
-
-    #         nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True),
-    #         nn.LeakyReLU(0.2, inplace=True),
-
-    #         nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True),
-    #         nn.LeakyReLU(0.2, inplace=True),
-
-    #         nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
-    #         nn.LeakyReLU(0.2, inplace=True),
-    #         # state size. (ndf*8) x 4 x 4
-    #         nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
-    #         nn.LeakyReLU(0.2, inplace=True),
-    #     )
-        
-    #     if ex
-    #     final_block = nn.Sequential(
-    #         nn.Flatten(),
-    #         nn.Linear(ndf*256, 1)
-    #     )
-
-
     def forward(self, x):
         x = self.main(x)
         # if self.wgan:
@@ -311,6 +327,33 @@ class Discriminative(nn.Module):
 
 
 def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent_dim, device, replay_memory):
+    """Train the models as a vanilla GAN.
+
+    Args:
+        gen (Generative): generator of the GAN.
+        disc (disc): discriminator of the GAN.
+        batch (tensor): batch to use for training.
+        loss_fn: loss function used for the optimization process.
+        disc_optimizer (Optimizer): optimizer of the discriminator.
+        gen_optimizer (Optimizer): optimizer of the generator.
+        latent_dim (int): number of channels of the latent space.
+        device (torch.device): device where to store tensors.
+        replay_memory (ReplayMemory): replay memory used to store new generated samples.
+
+    Returns:
+        gen_loss: loss of the generator model.
+        real_loss: loss obtained by the discriminator with the data sampled batch.
+        fake_loss: loss obtained by the discriminator with the fake generated batch.
+        disc_loss: total loss obtained by the discriminator.
+        D_x: guess of the discriminator for the data sampled batch.
+        D_G_z1: guess of the discriminator for the fake generated batch while updating the discriminator.
+        D_G_z2: guess of the discriminator for the fake generated batch while updating the generator.
+        disc_top: absolute value of the gradient at the top level of the discriminator.
+        disc_bottom: absolute value of the gradient at the bottom level of the discriminator.
+        gen_top: absolute value of the gradient at the top level of the generator.
+        gen_bottom: absolute value of the gradient at the bottom level of the generator.
+
+    """
 
     
     # (batch_size, channel, seq_len)
@@ -394,6 +437,25 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent
     return gen_loss.item(), real_loss.item(), fake_loss.item(), disc_loss.item(), D_x, D_G_z1, D_G_z2, disc_top.item(), disc_bottom.item(), gen_top.item(), gen_bottom.item()
 
 def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
+    """Train the discriminator in the WGAN setting.
+
+    Args:
+        gen (Generative): generator of the WGAN.
+        disc (disc): critic of the WGAN.
+        batch (tensor): batch to use for training.
+        lmbda (int): lambda parameter to weight the gradient penaly.
+        disc_optimizer (Optimizer): optimizer of the critic.
+        latent_dim (int): number of channels of the latent space.
+        device (torch.device): device where to store tensors.
+    
+    Returns:
+        loss: loss of the discriminator model
+        D_real: critic of the data sampled batch.
+        D_fake: critic of the fake generated batch.
+        gp: gradient penalty.
+        disc_top: absolute value of the gradient at the top level of the discriminator.
+        disc_bottom: absolute value of the gradient at the bottom level of the discriminator.
+    """
 
 
     ############################
@@ -447,20 +509,31 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     # gathering the loss and updating
     disc_optimizer.step()
         
-    # renaming
-    D_x = D_real
-    D_G_z1 = D_fake
-    D_G_z2 = gp
     
     disc_top = disc.main[0].weight.grad.norm()
     disc_bottom = disc.main[-1].weight.grad.norm()
 
-    return loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom
+    return loss, D_real, D_fake, gp, disc_top, disc_bottom
 
 
 
 def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
+    """Train the generator in the WGAN setting.
 
+    Args:
+        gen (Generative): generator of the WGAN.
+        disc (Discriminative): critic of the WGAN.
+        batch (tensor): batch to use for training.
+        gen_optimizer (Optimizer): optimizer of the generator.
+        latent_dim (int): number of channels of the latent space.
+        device (torch.device): device where to store tensors.
+    
+    Returns:
+        G_loss: loss of the generator model
+        gen_top: absolute value of the gradient at the top level of the generator.
+        gen_bottom: absolute value of the gradient at the bottom level of the generator.
+    """
+    
     # for p in disc.parameters():
     #     p.requires_grad = False
 
