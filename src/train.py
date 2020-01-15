@@ -1,10 +1,13 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import argparse
 import time
 import datetime
 import torch
 import torchaudio
 import numpy as np
-from dataset import MusicDataset, collate, OneHotEncoding, ToTensor, ToMulaw
+from dataset import MusicDataset, OneHotEncoding, ToTensor, ToMulaw
 from model import Generative, Discriminative, train_batch, weights_init, ReplayMemory, train_disc, train_gen
 from torch.utils.data import DataLoader, Dataset
 # from torchvision import transforms

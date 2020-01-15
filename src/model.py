@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 from torch import nn
@@ -5,6 +6,23 @@ import numpy as np
 import time
 import torch
 import random
+
+class Transpose1dLayer(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding=11, upsample=None, output_padding=1):
+        super(Transpose1dLayer, self).__init__()
+        self.upsample = upsample
+
+        self.upsample_layer = torch.nn.Upsample(scale_factor=upsample)
+        reflection_pad = kernel_size // 2
+        self.reflection_pad = nn.ConstantPad1d(reflection_pad, value=0)
+        self.conv1d = torch.nn.Conv1d(in_channels, out_channels, kernel_size, stride)
+        self.Conv1dTrans = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, padding, output_padding)
+
+    def forward(self, x):
+        if self.upsample:
+            return self.conv1d(self.reflection_pad(self.upsample_layer(x)))
+        else:
+            return self.Conv1dTrans(x)
 
 class AttentionLayer(nn.Module):
     """Attention layer of the SAGAN model.
@@ -126,16 +144,19 @@ class Generative(nn.Module):
 
         main = [
 
-            nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
+            # nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+            Transpose1dLayer(16 * ngf, 8 * ngf, 25, 1, upsample=4),
             nn.ReLU(inplace=True),
             
             # state size. (ngf*8) x 4 x 4
-            nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
+            # nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+            Transpose1dLayer(8 * ngf, 4 * ngf, 25, 1, upsample=4),
             nn.ReLU(inplace=True)
         ]
         
         block2 = [
-            nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
+            # nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+            Transpose1dLayer(ngf * 4, 2 * ngf, 25, 1, upsample=4),
             nn.ReLU(inplace=True),
         ]
 
@@ -148,17 +169,19 @@ class Generative(nn.Module):
 
         main += [
             # state size. (ngf*2) x 16 x 16
-            nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
+            # nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+            Transpose1dLayer(ngf * 2, ngf, 25, 1, upsample=4),
             nn.ReLU(inplace=True),
             
             # state size. (ngf) x 32 x 32
-            nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
+            # nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+            Transpose1dLayer(ngf, ng, 25, 1, upsample=4),
             nn.Tanh(),
         ]
 
         if extended_seq:
             extra_layer = [
-                nn.ConvTranspose1d( 32 * ngf, ngf * 16, kernel_size=25, stride=4, padding=11, output_padding =1, bias=True),
+                nn.ConvTranspose1d( 32 * ngf, ngf * 16, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
                 nn.ReLU(inplace=True),
             ]
             
@@ -184,12 +207,14 @@ class Generative(nn.Module):
         x = self.main(x)
 
         if self.post_proc:
+
             if (self.post_proc_filter_len % 2) == 0:
                 pad_left = self.post_proc_filter_len // 2
                 pad_right = pad_left - 1
             else:
                 pad_left = (self.post_proc_filter_len - 1) // 2
                 pad_right = pad_left
+
             x = nn.functional.pad(x, (pad_left, pad_right))
             x = self.post_proc_layer(x)
 
@@ -395,10 +420,10 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent
     fake_batch = gen(rnd_assgn)
 
 
-    # adding to replay memory
-    # replay_memory.push(fake_batch.detach())
-    # experience = replay_memory.sample(batch_size)
-    experience = fake_batch.detach()
+    # adding to replay memory and then sample from it
+    replay_memory.push(fake_batch.detach())
+    experience = replay_memory.sample(batch_size)
+    # experience = fake_batch.detach()
 
 
     output = disc(experience)
@@ -533,7 +558,7 @@ def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
         gen_top: absolute value of the gradient at the top level of the generator.
         gen_bottom: absolute value of the gradient at the bottom level of the generator.
     """
-    
+
     # for p in disc.parameters():
     #     p.requires_grad = False
 
@@ -560,7 +585,8 @@ def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
     gen_optimizer.step()
 
     gen_top = gen.linear.weight.grad.norm()
-    gen_bottom = gen.main[-2].weight.grad.norm()
+    gen_bottom = 0
+    # gen_bottom = gen.main[-2].weight.grad.norm()
 
     return G_loss, gen_top, gen_bottom
     

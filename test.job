@@ -20,6 +20,6 @@
 #$ -q gpu
 # Set the environment
 source /nfsd/compneuro/DATASETS/anaconda/etc/profile.d/conda.sh
-conda activate
+conda activate ./env
 
 bash src/train.sh

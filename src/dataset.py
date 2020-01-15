@@ -3,6 +3,9 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import torchaudio
 import librosa
 import os
