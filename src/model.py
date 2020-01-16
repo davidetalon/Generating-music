@@ -250,7 +250,7 @@ class Generative(nn.Module):
 
     def forward(self, x):
         x = self.fc1(x).view(-1, 16 * self.model_size, 16)
-        x = torch.nn.functional.relu(x)
+        x = torch.relu(x)
 
 
         x = torch.relu(self.deconv_1(x))
@@ -312,89 +312,140 @@ class PhaseShuffle(nn.Module):
 
         
 
-class Discriminative(nn.Module):
-    """Discriminative model of the gan: could act as critic or catch fake samples depending on the training algorithm.
+# class Discriminative(nn.Module):
+#     """Discriminative model of the gan: could act as critic or catch fake samples depending on the training algorithm.
 
-    Args:
-        ng (int): number of channels of the data space (generated samples). Default: 1.
-        ndf (ndf): dimensionality factor of the discriminator. Default: 64.
-        extended_seq (bool): extended_seq (bool): set if extended sequences are required. Default: ``False``.
-        wgan (bool): set if wgan is used as training algorithm. Default: ``False``.
-        attention (bool): set if apply attention. Default: ``False``.
-    """
+#     Args:
+#         ng (int): number of channels of the data space (generated samples). Default: 1.
+#         ndf (ndf): dimensionality factor of the discriminator. Default: 64.
+#         extended_seq (bool): extended_seq (bool): set if extended sequences are required. Default: ``False``.
+#         wgan (bool): set if wgan is used as training algorithm. Default: ``False``.
+#         attention (bool): set if apply attention. Default: ``False``.
+#     """
 
-    def __init__(self, ng=1, ndf=64, extended_seq=False, wgan=False, attention=False):
+#     def __init__(self, ng=1, ndf=64, extended_seq=False, wgan=False, attention=False):
 
-        super(Discriminative, self).__init__()
+#         super(Discriminative, self).__init__()
 
-        self.ng = ng
-        self.ndf = ndf
-        self.extended_seq = extended_seq
-        self.wgan = wgan
-        self.attention = attention
+#         self.ng = ng
+#         self.ndf = ndf
+#         self.extended_seq = extended_seq
+#         self.wgan = wgan
+#         self.attention = attention
 
-        main = [
+#         main = [
 
-            nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
-            nn.LeakyReLU(0.2, inplace=True),
-            PhaseShuffle(shift_factor=2),
+#             nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             PhaseShuffle(shift_factor=2),
 
-            nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True),
-            nn.LeakyReLU(0.2, inplace=True),
-            PhaseShuffle(shift_factor=2)
-        ]
+#             nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             PhaseShuffle(shift_factor=2)
+#         ]
 
-        block2 = [
-            nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True),
-            nn.LeakyReLU(0.2, inplace=True),
-            PhaseShuffle(shift_factor=2),
-        ]
+#         block2 = [
+#             nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             PhaseShuffle(shift_factor=2),
+#         ]
         
-        if attention:
-            main += [AttentionLayer(ndf * 2)]
-            main += block2
-            main += [AttentionLayer(ndf * 4)]
-        else:
-            main += block2
+#         if attention:
+#             main += [AttentionLayer(ndf * 2)]
+#             main += block2
+#             main += [AttentionLayer(ndf * 4)]
+#         else:
+#             main += block2
         
-        main += [
-            nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
-            nn.LeakyReLU(0.2, inplace=True),
-            PhaseShuffle(shift_factor=2),
+#         main += [
+#             nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             PhaseShuffle(shift_factor=2),
 
-            # state size. (ndf*8) x 4 x 4
-            nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
-            nn.LeakyReLU(0.2, inplace=True),
-        ]
+#             # state size. (ndf*8) x 4 x 4
+#             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
+#             nn.LeakyReLU(0.2, inplace=True),
+#         ]
 
-        if self.extended_seq:
-            extra_block = [
-            # state size. (ndf*8) x 4 x 4
-            PhaseShuffle(shift_factor=2),
-            nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True),
-            nn.LeakyReLU(0.2, inplace=True),
-            ]
+#         if self.extended_seq:
+#             extra_block = [
+#             # state size. (ndf*8) x 4 x 4
+#             PhaseShuffle(shift_factor=2),
+#             nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             ]
 
-            main += extra_block
+#             main += extra_block
 
 
-        final_block = [
-            nn.Flatten(),
-            nn.Linear(ndf*(512 if self.extended_seq else 256), 1)
-        ]
-        main += final_block
+#         final_block = [
+#             nn.Flatten(),
+#             nn.Linear(ndf*(512 if self.extended_seq else 256), 1)
+#         ]
+#         main += final_block
 
-        self.main = nn.Sequential(*main)
+#         self.main = nn.Sequential(*main)
 
-        self.squashing_layer = nn.Sigmoid()
+#         self.squashing_layer = nn.Sigmoid()
 
     
-    def forward(self, x):
-        x = self.main(x)
-        # if self.wgan:
-        #     x = self.squashing_layer(x)
+#     def forward(self, x):
+#         x = self.main(x)
+#         # if self.wgan:
+#         #     x = self.squashing_layer(x)
 
-        return x
+#         return x
+
+class Discriminative(nn.Module):
+    def __init__(self, num_channels=1, model_size=64, extended_seq=False, wgan=False, attention=False):
+        super(Discriminative, self).__init__()
+        shift_factor = 2
+        self.model_size = model_size  # d
+        self.num_channels = num_channels  # c
+        self.shift_factor = 2  # n
+        self.alpha = 0.2
+
+        self.conv1 = nn.Conv1d(num_channels, model_size, 25, stride=4, padding=11)
+        self.conv2 = nn.Conv1d(model_size, 2 * model_size, 25, stride=4, padding=11)
+        self.conv3 = nn.Conv1d(2 * model_size, 4 * model_size, 25, stride=4, padding=11)
+        self.conv4 = nn.Conv1d(4 * model_size, 8 * model_size, 25, stride=4, padding=11)
+        self.conv5 = nn.Conv1d(8 * model_size, 16 * model_size, 25, stride=4, padding=11)
+
+        self.ps1 = PhaseShuffle(shift_factor)
+        self.ps2 = PhaseShuffle(shift_factor)
+        self.ps3 = PhaseShuffle(shift_factor)
+        self.ps4 = PhaseShuffle(shift_factor)
+
+        self.fc1 = nn.Linear(256 * model_size, 1)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight.data)
+
+    def forward(self, x):
+        x = nn.functional.leaky_relu(self.conv1(x), negative_slope=self.alpha)
+
+        x = self.ps1(x)
+
+        x = nn.functional.leaky_relu(self.conv2(x), negative_slope=self.alpha)
+
+        x = self.ps2(x)
+
+        x = nn.functional.leaky_relu(self.conv3(x), negative_slope=self.alpha)
+
+        x = self.ps3(x)
+
+        x = nn.functional.leaky_relu(self.conv4(x), negative_slope=self.alpha)
+
+        x = self.ps4(x)
+
+        x = nn.functional.leaky_relu(self.conv5(x), negative_slope=self.alpha)
+
+
+        x = x.view(-1, 256 * self.model_size)
+
+
+        return self.fc1(x)
         
 
 
@@ -583,8 +634,10 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     disc_optimizer.step()
         
     
-    disc_top = disc.main[0].weight.grad.norm()
-    disc_bottom = disc.main[-1].weight.grad.norm()
+    # disc_top = disc.main[0].weight.grad.norm()
+    # disc_bottom = disc.main[-1].weight.grad.norm()
+    disc_top = 0
+    disc_bottom = 0
 
     return loss, D_real, D_fake, gp, disc_top, disc_bottom
 
