@@ -117,108 +117,156 @@ def weights_init(m):
     #     nn.init.normal_(m.weight.data, 1.0, 0.02)
     #     nn.init.constant_(m.bias.data, 0)
 
-class Generative(nn.Module):
-    """Generative model which maps from noise in the latent space to samples in the data space.
+# class Generative(nn.Module):
+#     """Generative model which maps from noise in the latent space to samples in the data space.
 
-    Args:
-        ng (int): number of channels of the data space (generated samples). Default: 1.
-        ngf (int): dimensionality factor of the generator. Default: 64.
-        extended_seq (bool): set if extended sequences are required. Default: ``False``.
-        latent_dim (int): number of channels of the latent space. Default: 100.
-        post_proc (bool): set if the post processing is required. Default: ``True``.
-        attention (bool): set if apply attention. Default: ``False``.
-    """
+#     Args:
+#         ng (int): number of channels of the data space (generated samples). Default: 1.
+#         ngf (int): dimensionality factor of the generator. Default: 64.
+#         extended_seq (bool): set if extended sequences are required. Default: ``False``.
+#         latent_dim (int): number of channels of the latent space. Default: 100.
+#         post_proc (bool): set if the post processing is required. Default: ``True``.
+#         attention (bool): set if apply attention. Default: ``False``.
+#     """
 
-    def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False):
+#     def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False):
 
-        super(Generative, self).__init__()
-        self.ngf = ngf
-        self.extended_seq = extended_seq
-        self.post_proc = post_proc
-        self.attention = attention
+#         super(Generative, self).__init__()
+#         self.ngf = ngf
+#         self.extended_seq = extended_seq
+#         self.post_proc = post_proc
+#         self.attention = attention
 
-        if self.extended_seq:
-            self.linear = nn.Linear(latent_dim, 256*2*ngf)
-        else:
-            self.linear = nn.Linear(latent_dim, 256*ngf)
+#         if self.extended_seq:
+#             self.linear = nn.Linear(latent_dim, 256*2*ngf)
+#         else:
+#             self.linear = nn.Linear(latent_dim, 256*ngf)
 
-        main = [
+#         main = [
 
-            # nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-            Transpose1dLayer(16 * ngf, 8 * ngf, 25, 1, upsample=4),
-            nn.ReLU(inplace=True),
+#             nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+#             # Transpose1dLayer(16 * ngf, 8 * ngf, 25, 1, upsample=4),
+#             nn.ReLU(inplace=True),
             
-            # state size. (ngf*8) x 4 x 4
-            # nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-            Transpose1dLayer(8 * ngf, 4 * ngf, 25, 1, upsample=4),
-            nn.ReLU(inplace=True)
-        ]
+#             # state size. (ngf*8) x 4 x 4
+#             nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+#             # Transpose1dLayer(8 * ngf, 4 * ngf, 25, 1, upsample=4),
+#             nn.ReLU(inplace=True)
+#         ]
         
-        block2 = [
-            # nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-            Transpose1dLayer(ngf * 4, 2 * ngf, 25, 1, upsample=4),
-            nn.ReLU(inplace=True),
-        ]
+#         block2 = [
+#             nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+#             # Transpose1dLayer(ngf * 4, 2 * ngf, 25, 1, upsample=4),
+#             nn.ReLU(inplace=True),
+#         ]
 
-        if attention:
-            main +=  [AttentionLayer(ngf * 4)]
-            main += block2
-            main += [AttentionLayer(ngf * 2)]
-        else:
-            main += block2
+#         if attention:
+#             main +=  [AttentionLayer(ngf * 4)]
+#             main += block2
+#             main += [AttentionLayer(ngf * 2)]
+#         else:
+#             main += block2
 
-        main += [
-            # state size. (ngf*2) x 16 x 16
-            # nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-            Transpose1dLayer(ngf * 2, ngf, 25, 1, upsample=4),
-            nn.ReLU(inplace=True),
+#         main += [
+#             # state size. (ngf*2) x 16 x 16
+#             nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+#             # Transpose1dLayer(ngf * 2, ngf, 25, 1, upsample=4),
+#             nn.ReLU(inplace=True),
             
-            # state size. (ngf) x 32 x 32
-            # nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-            Transpose1dLayer(ngf, ng, 25, 1, upsample=4),
-            nn.Tanh(),
-        ]
+#             # state size. (ngf) x 32 x 32
+#             nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+#             # Transpose1dLayer(ngf, ng, 25, 1, upsample=4),
+#             nn.Tanh(),
+#         ]
 
-        if extended_seq:
-            extra_layer = [
-                nn.ConvTranspose1d( 32 * ngf, ngf * 16, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-                nn.ReLU(inplace=True),
-            ]
+#         if extended_seq:
+#             extra_layer = [
+#                 nn.ConvTranspose1d( 32 * ngf, ngf * 16, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
+#                 nn.ReLU(inplace=True),
+#             ]
             
-            main = extra_layer + main
+#             main = extra_layer + main
 
-        # instantiate the model
-        self.main = nn.Sequential(*main)
+#         # instantiate the model
+#         self.main = nn.Sequential(*main)
 
-        if post_proc:
-            self.post_proc_filter_len = 512
-            self.post_proc_layer = nn.Conv1d(ng, ng, self.post_proc_filter_len)
+#         if post_proc:
+#             self.post_proc_filter_len = 512
+#             self.post_proc_layer = nn.Conv1d(ng, ng, self.post_proc_filter_len)
 
 
     
+#     def forward(self, x):
+#         x = self.linear(x)
+#         x = nn.ReLU()(x)
+#         if self.extended_seq:
+#             x = x.view(x.shape[0], 2 * 16 * self.ngf, 16)
+#         else:
+#             x = x.view(x.shape[0], 16 * self.ngf, 16)
+
+#         x = self.main(x)
+
+#         if self.post_proc:
+
+#             if (self.post_proc_filter_len % 2) == 0:
+#                 pad_left = self.post_proc_filter_len // 2
+#                 pad_right = pad_left - 1
+#             else:
+#                 pad_left = (self.post_proc_filter_len - 1) // 2
+#                 pad_right = pad_left
+
+#             x = nn.functional.pad(x, (pad_left, pad_right))
+#             x = self.post_proc_layer(x)
+
+#         return x
+
+class Generative(nn.Module):
+    def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False): 
+        super(Generative, self).__init__()
+        
+
+        self.model_size = ngf  # d
+        self.num_channels = ng  # c
+        self.latent_di = latent_dim
+        self.post_proc_filt_len = 512
+        # "Dense" is the same meaning as fully connection.
+        self.fc1 = nn.Linear(latent_dim, 256 * self.model_size)
+
+   
+        stride = 1
+        upsample = 4
+        self.deconv_1 = Transpose1dLayer(16 * self.model_size, 8 * self.model_size, 25, stride, upsample=upsample)
+        self.deconv_2 = Transpose1dLayer(8 * self.model_size, 4 * self.model_size, 25, stride, upsample=upsample)
+        self.deconv_3 = Transpose1dLayer(4 * self.model_size, 2 * self.model_size, 25, stride, upsample=upsample)
+        self.deconv_4 = Transpose1dLayer(2 * self.model_size, self.model_size, 25, stride, upsample=upsample)
+        self.deconv_5 = Transpose1dLayer(self.model_size, ng, 25, stride, upsample=upsample)
+
+        if self.post_proc_filt_len:
+            self.ppfilter1 = nn.Conv1d(ng, ng, self.post_proc_filt_len)
+
+        for m in self.modules():
+            if isinstance(m, nn.ConvTranspose1d) or isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight.data)
+
     def forward(self, x):
-        x = self.linear(x)
-        x = nn.ReLU()(x)
-        if self.extended_seq:
-            x = x.view(x.shape[0], 2 * 16 * self.ngf, 16)
-        else:
-            x = x.view(x.shape[0], 16 * self.ngf, 16)
+        x = self.fc1(x).view(-1, 16 * self.model_size, 16)
+        x = torch.nn.functional.relu(x)
 
-        x = self.main(x)
 
-        if self.post_proc:
+        x = torch.relu(self.deconv_1(x))
+      
 
-            if (self.post_proc_filter_len % 2) == 0:
-                pad_left = self.post_proc_filter_len // 2
-                pad_right = pad_left - 1
-            else:
-                pad_left = (self.post_proc_filter_len - 1) // 2
-                pad_right = pad_left
+        x = torch.relu(self.deconv_2(x))
 
-            x = nn.functional.pad(x, (pad_left, pad_right))
-            x = self.post_proc_layer(x)
 
-        return x
+        x = torch.relu(self.deconv_3(x))
+
+
+        x = torch.relu(self.deconv_4(x))
+
+
+        output = torch.tanh(self.deconv_5(x))
+        return output
 
 class PhaseShuffle(nn.Module):
     """Phase Shuffle layer as described by https://arxiv.org/pdf/1802.04208.pdf
@@ -584,7 +632,8 @@ def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
 
     gen_optimizer.step()
 
-    gen_top = gen.linear.weight.grad.norm()
+    # gen_top = gen.linear.weight.grad.norm()
+    gen_top = 0
     gen_bottom = 0
     # gen_bottom = gen.main[-2].weight.grad.norm()
 

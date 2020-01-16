@@ -80,7 +80,7 @@ def sample_fake(latent, date, epoch, prod_dir):
             sample = torch.squeeze(sample)
             target_path  = prod_dir / (date + "_" + str(epoch) + "_" + str(idx) + ".wav")
             sample = sample.numpy()
-            sf.write(target_path, sample, 16000, format='WAV', subtype='FLOAT')
+            sf.write(target_path, sample, 16000, format='WAV')
 
             # torchaudio.save(str(path), fake, 16000)
             # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
