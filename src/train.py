@@ -86,6 +86,29 @@ def sample_fake(latent, date, epoch, prod_dir):
             # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
             # scipy.io.wavfile.write(prod_dir / (date + "epoch" + str(epoch) + ".wav"), 16000, fake.T )
 
+def calc_gradient_penalty(net_dis, real_data, fake_data, batch_size, lmbda, device):
+    # Compute interpolation factors
+    alpha = torch.rand(batch_size, 1, 1, device=device)
+    alpha = alpha.expand(real_data.size())
+
+
+    # Interpolate between real and fake data.
+    interpolates = alpha * real_data + (1 - alpha) * fake_data
+    interpolates.requires_grad=True
+
+    # Evaluate discriminator
+    disc_interpolates = net_dis(interpolates)
+
+    # Obtain gradients of the discriminator with respect to the inputs
+    gradients = torch.autograd.grad(outputs=disc_interpolates, inputs=interpolates,
+                              grad_outputs=torch.ones(disc_interpolates.size(), device=device),
+                              create_graph=True, retain_graph=True, only_inputs=True)[0]
+    gradients = gradients.view(gradients.size(0), -1)
+
+    # Compute MSE between 1.0 and the gradient of the norm penalty to make discriminator
+    # to be a 1-Lipschitz function.
+    gradient_penalty = lmbda * ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+    return gradient_penalty
 
 if __name__ == '__main__':
     
@@ -195,15 +218,98 @@ if __name__ == '__main__':
             if(args.wgan >= 1):
 
                 disc_losses = []
-                for t in range(args.disc_updates):
-                    batch_sample = data_iter.next()
-                    batch = batch_sample.to(device)
-                    disc_loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom = train_disc(gen, disc, batch, 10, disc_optimizer, latent_dim, device)
-                    disc_losses.append(disc_loss.item())
                 
-                disc_loss = np.mean(np.asarray(disc_losses))
+                for p in disc.parameters():
+                    p.requires_grad = True
+                
+                for iter_dis in range(5):
+                    disc.zero_grad()
+
+                    # Noise
+                    one = torch.tensor(1, dtype=torch.float, device=device, requires_grad=True)
+                    neg_one = one * -1
+                    noise_Var = torch.Tensor(args.batch_size, args.latent_dim, device=device).uniform_(-1, 1)
+                    # if cuda:
+                    #     noise = noise.cuda()
+                    # noise_Var = Variable(noise, requires_grad=False)
+
+                    batch = data_iter.next()
+                    batch = batch.to(device)
+                    real_data_Var = batch
+                    batch_size = real_data_Var.shape[0]
+
+                    # a) compute loss contribution from real training data
                     
-                gen_loss, gen_top, gen_bottom = train_gen(gen, disc, batch, gen_optimizer, latent_dim, device)
+                    D_real = disc(real_data_Var)
+                    D_real = D_real.mean()  # avg loss
+                    D_real.backward(neg_one)  # loss * -1
+
+                    # b) compute loss contribution from generated data, then backprop.
+                    fake = gen(noise_Var)
+                    D_fake = disc(fake)
+                    D_fake = D_fake.mean()
+                    D_fake.backward(one)
+
+                    # c) compute gradient penalty and backprop
+                    gradient_penalty = calc_gradient_penalty(disc, real_data_Var.data,
+                                                            fake.data, batch_size, 10,
+                                                            device)
+                    gradient_penalty.backward(one)
+
+                    # Compute cost * Wassertein loss..
+                    D_cost_train = D_fake - D_real + gradient_penalty
+                    D_wass_train = D_real - D_fake
+
+                    # Update gradient of discriminator.
+                    disc_optimizer.step()
+
+                    disc_loss = D_cost_train
+                    D_x = D_fake
+                    D_G_z1 = D_real
+                    D_G_z2 = gradient_penalty
+                    disc_top = 0
+                    disc_bottom = 0
+                    disc_losses.append(disc_loss.item())
+                disc_loss = np.mean(np.asarray(disc_losses))
+
+                #############################
+                # (3) Train Generator
+                #############################
+                # Prevent discriminator update.
+                for p in disc.parameters():
+                    p.requires_grad = False
+
+                # Reset generator gradients
+                gen.zero_grad()
+
+                # Noise
+                noise_Var = torch.Tensor(batch_size, latent_dim, device=device).uniform_(-1, 1)
+                # if cuda:
+                #     noise = noise.cuda()
+                # noise_Var = Variable(noise, requires_grad=False)
+
+                fake = gen(noise_Var)
+                G = disc(fake)
+                G = G.mean()
+
+                # Update gradients.
+                G.backward(neg_one)
+                G_cost = -G
+
+                gen_optimizer.step()
+                gen_loss = G
+                gen_top = 0
+                gen_bottom = 0
+
+                # for t in range(args.disc_updates):
+                #     batch_sample = data_iter.next()
+                #     batch = batch_sample.to(device)
+                #     disc_loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom = train_disc(gen, disc, batch, 10, disc_optimizer, latent_dim, device)
+                #     disc_losses.append(disc_loss.item())
+                
+                # disc_loss = np.mean(np.asarray(disc_losses))
+                    
+                # gen_loss, gen_top, gen_bottom = train_gen(gen, disc, batch, gen_optimizer, latent_dim, device)
 
                 real_loss = fake_loss = 0        
             else:
