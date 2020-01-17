@@ -229,7 +229,7 @@ if __name__ == '__main__':
                     one = torch.tensor(1, dtype=torch.float, device=device, requires_grad=True)
                     neg_one = one * -1
                     # noise_Var = torch.Tensor(args.batch_size, args.latent_dim, device=device).uniform_(-1, 1)
-                    noise_Var = torch.empty((args.generated_samples, 1, latent_dim), device=device).uniform_(-1, 1)
+                    noise_Var = torch.empty((args.batch_size, 1, latent_dim), device=device).uniform_(-1, 1)
                     # if cuda:
                     #     noise = noise.cuda()
                     # noise_Var = Variable(noise, requires_grad=False)
@@ -284,7 +284,8 @@ if __name__ == '__main__':
                 gen.zero_grad()
 
                 # Noise
-                noise_Var = torch.Tensor(batch_size, latent_dim, device=device).uniform_(-1, 1)
+                # noise_Var = torch.Tensor(batch_size, latent_dim, device=device).uniform_(-1, 1)
+                noise_Var = torch.empty((args.batch_size, 1, latent_dim), device=device).uniform_(-1, 1)
                 # if cuda:
                 #     noise = noise.cuda()
                 # noise_Var = Variable(noise, requires_grad=False)
