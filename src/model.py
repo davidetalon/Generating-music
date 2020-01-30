@@ -668,7 +668,7 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     loss = D_fake - D_real + gp
     W_loss = D_real - D_fake
 
-    print("D_real:", D_real.item()," D_fake:", D_fake.item(), " D_wass:", W_loss.item())
+    # print("D_real:", D_real.item()," D_fake:", D_fake.item(), " D_wass:", W_loss.item())
     # loss.backward()
 
     # gathering the loss and updating

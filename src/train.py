@@ -273,7 +273,7 @@ if __name__ == '__main__':
                 gp_history.append(gp)
                 W_loss_history.append(W_loss)
                 end = time.time()
-                # print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [W_loss: %f]" % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader)//5, disc_loss, gen_loss, W_loss))
+                print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [W_loss: %f]" % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader)//5, disc_loss, gen_loss, W_loss))
             else:
                 D_x_history.append(D_x)
                 D_G_z1_history.append(D_G_z1)
