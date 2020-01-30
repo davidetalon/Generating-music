@@ -113,14 +113,14 @@ def song_loader(chunk_info, seq_len, normalize=True):
     # sampling_rate, song = scipy.io.wavfile.read(path, mmap=False)
 
     # data is loaded as a tensor
-    song, _ = torchaudio.load(chunk_info['path'], num_frames=seq_len, offset=seq_len*chunk_info['idx'])
+    song, _ = torchaudio.load(chunk_info['path'], normalization=True, num_frames=seq_len, offset=seq_len*chunk_info['idx'])
 
     # let's load the chunk
     # song, _ = librosa.load(chunk_info['path'], sr=16000, offset=seq_len*chunk_info['idx'], duration=seq_len)
     # print(type(song), song.shape)
    
 
-    return song
+    return song.type(torch.float32)
 
 class Normalize():
     """Normalize a sample removing the mean and squashing it between [-1,1]

@@ -8,21 +8,29 @@ import torch
 import random
 
 class Transpose1dLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding=11, upsample=None, output_padding=1):
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride, upsample=4):
         super(Transpose1dLayer, self).__init__()
+
         self.upsample = upsample
 
-        self.upsample_layer = torch.nn.Upsample(scale_factor=upsample)
-        reflection_pad = kernel_size // 2
-        self.reflection_pad = nn.ConstantPad1d(reflection_pad, value=0)
+        self.reflection_pad = kernel_size // 2
+        # self.reflection_pad = nn.ConstantPad1d(reflection_pad, value=0)
+
         self.conv1d = torch.nn.Conv1d(in_channels, out_channels, kernel_size, stride)
-        self.Conv1dTrans = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, padding, output_padding)
+        # self.Conv1dTrans = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, padding, output_padding)
 
     def forward(self, x):
-        if self.upsample:
-            return self.conv1d(self.reflection_pad(self.upsample_layer(x)))
-        else:
-            return self.Conv1dTrans(x)
+
+        x = torch.nn.functional.interpolate(x, scale_factor=self.upsample, mode='nearest')
+
+        x = torch.nn.functional.pad(x, (self.reflection_pad, self.reflection_pad), mode='constant', value=0)
+
+        x = self.conv1d(x)
+
+        return x
+        # return self.conv1d(self.reflection_pad(self.upsample_layer(x)))
+
 
 class AttentionLayer(nn.Module):
     """Attention layer of the SAGAN model.
@@ -104,15 +112,15 @@ class ReplayMemory(object):
 
 def weights_init(m):
     """
-        Initialize the network: convolutional and batchnorm layers are initialized with 
-        values coming from a Normal distribution with mean 0 and variance 0.02. Biases are set to 0.
+        Initialize the network: convolutional and linear layers are initialized with 
+        values coming from a Kaiming normal distribution.
 
         Args:
             m: layer to initialize.
     """
     classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.02)
+    if classname.find('Conv') != -1 or classname.find('Linear') != -1:
+        nn.init.kaiming_normal_(m.weight.data)
     # elif classname.find('BatchNorm') != -1:
     #     nn.init.normal_(m.weight.data, 1.0, 0.02)
     #     nn.init.constant_(m.bias.data, 0)
@@ -129,6 +137,7 @@ def weights_init(m):
 #         attention (bool): set if apply attention. Default: ``False``.
 #     """
 
+
 #     def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False):
 
 #         super(Generative, self).__init__()
@@ -136,75 +145,71 @@ def weights_init(m):
 #         self.extended_seq = extended_seq
 #         self.post_proc = post_proc
 #         self.attention = attention
+#         self.post_proc_filter_len = 512
 
 #         if self.extended_seq:
 #             self.linear = nn.Linear(latent_dim, 256*2*ngf)
 #         else:
 #             self.linear = nn.Linear(latent_dim, 256*ngf)
 
-#         main = [
+#         self.conv1 = Transpose1dLayer(16 * ngf, 8 * ngf, 25, 1, upsample=4)
+#         self.conv2 = Transpose1dLayer(8 * ngf, 4 * ngf, 25, 1, upsample=4)
+#         self.conv3 = Transpose1dLayer(4 * ngf, 2 * ngf, 25, 1, upsample=4)
+#         self.conv4 = Transpose1dLayer(2 * ngf, ngf, 25, 1, upsample=4)
+#         self.conv5 = Transpose1dLayer(ngf, ng, 25, 1, upsample=4)
 
-#             nn.ConvTranspose1d( 16 * ngf, ngf * 8, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-#             # Transpose1dLayer(16 * ngf, 8 * ngf, 25, 1, upsample=4),
-#             nn.ReLU(inplace=True),
-            
-#             # state size. (ngf*8) x 4 x 4
-#             nn.ConvTranspose1d(ngf * 8, ngf * 4, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-#             # Transpose1dLayer(8 * ngf, 4 * ngf, 25, 1, upsample=4),
-#             nn.ReLU(inplace=True)
-#         ]
-        
-#         block2 = [
-#             nn.ConvTranspose1d( ngf * 4, ngf * 2, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-#             # Transpose1dLayer(ngf * 4, 2 * ngf, 25, 1, upsample=4),
-#             nn.ReLU(inplace=True),
-#         ]
+#         if self.attention:
+#             self.att1 = AttentionLayer(ngf * 4)
+#             self.att2 = AttentionLayer(ngf * 2) 
 
-#         if attention:
-#             main +=  [AttentionLayer(ngf * 4)]
-#             main += block2
-#             main += [AttentionLayer(ngf * 2)]
-#         else:
-#             main += block2
+#         if self.extended_seq:
+#             self.extended = Transpose1dLayer(32 * ngf, ngf * 16, 25, 1, upsample=4)
 
-#         main += [
-#             # state size. (ngf*2) x 16 x 16
-#             nn.ConvTranspose1d( ngf * 2, ngf, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-#             # Transpose1dLayer(ngf * 2, ngf, 25, 1, upsample=4),
-#             nn.ReLU(inplace=True),
-            
-#             # state size. (ngf) x 32 x 32
-#             nn.ConvTranspose1d( ngf, ng, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-#             # Transpose1dLayer(ngf, ng, 25, 1, upsample=4),
-#             nn.Tanh(),
-#         ]
-
-#         if extended_seq:
-#             extra_layer = [
-#                 nn.ConvTranspose1d( 32 * ngf, ngf * 16, kernel_size=25, stride=4, padding=11, output_padding=1, bias=True),
-#                 nn.ReLU(inplace=True),
-#             ]
-            
-#             main = extra_layer + main
-
-#         # instantiate the model
-#         self.main = nn.Sequential(*main)
-
-#         if post_proc:
-#             self.post_proc_filter_len = 512
+#         if self.post_proc:
 #             self.post_proc_layer = nn.Conv1d(ng, ng, self.post_proc_filter_len)
 
+#         for m in self.modules():
+#             if isinstance(m, nn.ConvTranspose1d) or isinstance(m, nn.Linear):
+#                 nn.init.kaiming_normal_(m.weight.data)
 
-    
 #     def forward(self, x):
 #         x = self.linear(x)
-#         x = nn.ReLU()(x)
+#         x = nn.ReLU(inplace=True)(x)
+#         # x = nn.ReLU()(x)
 #         if self.extended_seq:
 #             x = x.view(x.shape[0], 2 * 16 * self.ngf, 16)
 #         else:
 #             x = x.view(x.shape[0], 16 * self.ngf, 16)
 
-#         x = self.main(x)
+
+#         if self.extended_seq:
+#             x = self.extended(x)
+#             x = nn.ReLU(inplace=True)(x)
+
+#         x = self.conv1(x)
+#         x = nn.ReLU(inplace=True)(x)
+
+#         x = self.conv2(x)
+#         x = nn.ReLU(inplace=True)(x)
+
+#         # check for attention
+#         if self.attention:
+#             x = self.att1(x)
+
+#         x = self.conv3(x)
+#         x = nn.ReLU(inplace=True)(x)
+
+#         # check for attention
+#         if self.attention:
+#             x = self.att2(x)
+
+#         x = self.conv4(x)
+#         x = nn.ReLU(inplace=True)(x)
+
+#         x = self.conv5(x)
+#         x = nn.Tanh()(x)
+
+        
 
 #         if self.post_proc:
 
@@ -220,6 +225,8 @@ def weights_init(m):
 
 #         return x
 
+    
+
 class Generative(nn.Module):
     def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False): 
         super(Generative, self).__init__()
@@ -230,16 +237,16 @@ class Generative(nn.Module):
         self.latent_di = latent_dim
         self.post_proc_filt_len = 512
         # "Dense" is the same meaning as fully connection.
-        self.fc1 = nn.Linear(latent_dim, 256 * self.model_size)
+        self.linear = nn.Linear(latent_dim, 256 * self.model_size)
 
    
         stride = 1
         upsample = 4
-        self.deconv_1 = Transpose1dLayer(16 * self.model_size, 8 * self.model_size, 25, stride, upsample=upsample)
-        self.deconv_2 = Transpose1dLayer(8 * self.model_size, 4 * self.model_size, 25, stride, upsample=upsample)
-        self.deconv_3 = Transpose1dLayer(4 * self.model_size, 2 * self.model_size, 25, stride, upsample=upsample)
-        self.deconv_4 = Transpose1dLayer(2 * self.model_size, self.model_size, 25, stride, upsample=upsample)
-        self.deconv_5 = Transpose1dLayer(self.model_size, ng, 25, stride, upsample=upsample)
+        self.conv1 = Transpose1dLayer(16 * self.model_size, 8 * self.model_size, 25, stride, upsample=upsample)
+        self.conv2 = Transpose1dLayer(8 * self.model_size, 4 * self.model_size, 25, stride, upsample=upsample)
+        self.conv3 = Transpose1dLayer(4 * self.model_size, 2 * self.model_size, 25, stride, upsample=upsample)
+        self.conv4 = Transpose1dLayer(2 * self.model_size, self.model_size, 25, stride, upsample=upsample)
+        self.conv5 = Transpose1dLayer(self.model_size, ng, 25, stride, upsample=upsample)
 
         if self.post_proc_filt_len:
             self.ppfilter1 = nn.Conv1d(ng, ng, self.post_proc_filt_len)
@@ -249,23 +256,23 @@ class Generative(nn.Module):
                 nn.init.kaiming_normal_(m.weight.data)
 
     def forward(self, x):
-        x = self.fc1(x).view(-1, 16 * self.model_size, 16)
+        x = self.linear(x).view(-1, 16 * self.model_size, 16)
         x = torch.relu(x)
 
 
-        x = torch.relu(self.deconv_1(x))
+        x = torch.relu(self.conv1(x))
       
 
-        x = torch.relu(self.deconv_2(x))
+        x = torch.relu(self.conv2(x))
 
 
-        x = torch.relu(self.deconv_3(x))
+        x = torch.relu(self.conv3(x))
 
 
-        x = torch.relu(self.deconv_4(x))
+        x = torch.relu(self.conv4(x))
 
 
-        output = torch.tanh(self.deconv_5(x))
+        output = torch.tanh(self.conv5(x))
         return output
 
 class PhaseShuffle(nn.Module):
@@ -280,35 +287,65 @@ class PhaseShuffle(nn.Module):
         super(PhaseShuffle, self).__init__()
         self.shift_factor = shift_factor
 
-    def forward(self, x):
+    # def forward(self, x):
 
-        seq_len = x.shape[-1]
-        random_shift = torch.randint(low = 0, high= 3, size=(x.shape[0],))
+    #     seq_len = x.shape[-1]
+    #     random_shift = torch.randint(low = -self.shift_factor, high= self.shift_factor, size=(x.shape[0],))
   
-        abs_shift = torch.abs(random_shift)
+    #     abs_shift = torch.abs(random_shift)
 
-        shifted_batch = torch.empty(x.size())
-        for idx, sample in enumerate(torch.split(x, 1, dim=0)):
+    #     shifted_batch = torch.empty(x.size())
+    #     for idx, sample in enumerate(torch.split(x, 1, dim=0)):
 
-            current_shift = abs_shift[idx]
-            # sample = torch.unsqueeze(sample, dim=0)
+    #         current_shift = abs_shift[idx]
+    #         # sample = torch.unsqueeze(sample, dim=0)
  
-            if (abs_shift[idx] == 0):
-                shifted = sample
-            elif (abs_shift[idx] > 0):
-                # shifted = torch.empty(sample.size(), device=torch.device("cuda"))
-                padded = torch.nn.functional.pad(sample, (current_shift, 0), mode='circular')
-                shifted = torch.narrow(padded, dim=-1, start=0, length=seq_len)
+    #         if (abs_shift[idx] == 0):
+    #             shifted = sample
+    #         elif (abs_shift[idx] > 0):
+    #             # shifted = torch.empty(sample.size(), device=torch.device("cuda"))
+    #             padded = torch.nn.functional.pad(sample, (current_shift, 0), mode='circular')
+    #             shifted = torch.narrow(padded, dim=-1, start=0, length=seq_len)
+    #         else:
+    #             padded = torch.nn.functional.pad(sample, (0, current_shift), mode='circular')
+    #             shifted = torch.narrow(padded, dim=-1, start=x.shape[-1] - seq_len, length=seq_len)
+ 
+    #         shifted_batch[idx] = shifted
+
+    #     # # x = torch.cat(shifted_batch, dim=0)
+    #     # x = shifted_batch
+
+    #     return x
+
+    def forward(self, x):
+        if self.shift_factor == 0:
+            return x
+        # uniform in (L, R)
+        k_list = torch.Tensor(x.shape[0]).random_(0, 2 * self.shift_factor + 1) - self.shift_factor
+        k_list = k_list.numpy().astype(int)
+
+        # Combine sample indices into lists so that less shuffle operations
+        # need to be performed
+        k_map = {}
+        for idx, k in enumerate(k_list):
+            k = int(k)
+            if k not in k_map:
+                k_map[k] = []
+            k_map[k].append(idx)
+
+        # Make a copy of x for our output
+        x_shuffle = x.clone()
+
+        # Apply shuffle to each sample
+        for k, idxs in k_map.items():
+            if k > 0:
+                x_shuffle[idxs] = torch.nn.functional.pad(x[idxs][..., :-k], (k, 0), mode='reflect')
             else:
-                padded = torch.nn.functional.pad(sample, (0, current_shift), mode='circular')
-                shifted = torch.narrow(padded, dim=-1, start=x.shape[-1] - seq_len, length=seq_len)
- 
-            shifted_batch[idx] = shifted
+                x_shuffle[idxs] = torch.nn.functional.pad(x[idxs][..., -k:], (0, -k), mode='reflect')
 
-        # # x = torch.cat(shifted_batch, dim=0)
-        # x = shifted_batch
-
-        return x
+        assert x_shuffle.shape == x.shape, "{}, {}".format(x_shuffle.shape,
+                                                       x.shape)
+        return x_shuffle
 
         
 
@@ -333,66 +370,62 @@ class PhaseShuffle(nn.Module):
 #         self.wgan = wgan
 #         self.attention = attention
 
-#         main = [
+#         self.conv1 = nn.Conv1d(ng, ndf, 25, 4, 11, bias=True)
+#         self.conv2 = nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True)
+#         self.conv3 = nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True)
+#         self.conv4 = nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True)
+#         self.conv5 = nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True)
 
-#             nn.Conv1d(ng, ndf, 25, 4, 11, bias=True),
-#             nn.LeakyReLU(0.2, inplace=True),
-#             PhaseShuffle(shift_factor=2),
-
-#             nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True),
-#             nn.LeakyReLU(0.2, inplace=True),
-#             PhaseShuffle(shift_factor=2)
-#         ]
-
-#         block2 = [
-#             nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True),
-#             nn.LeakyReLU(0.2, inplace=True),
-#             PhaseShuffle(shift_factor=2),
-#         ]
-        
-#         if attention:
-#             main += [AttentionLayer(ndf * 2)]
-#             main += block2
-#             main += [AttentionLayer(ndf * 4)]
-#         else:
-#             main += block2
-        
-#         main += [
-#             nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True),
-#             nn.LeakyReLU(0.2, inplace=True),
-#             PhaseShuffle(shift_factor=2),
-
-#             # state size. (ndf*8) x 4 x 4
-#             nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True),
-#             nn.LeakyReLU(0.2, inplace=True),
-#         ]
+#         self.linear = nn.Linear(ndf*(512 if self.extended_seq else 256), 1)
 
 #         if self.extended_seq:
-#             extra_block = [
-#             # state size. (ndf*8) x 4 x 4
-#             PhaseShuffle(shift_factor=2),
-#             nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True),
-#             nn.LeakyReLU(0.2, inplace=True),
-#             ]
+#             self.extra_layer = nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True)
 
-#             main += extra_block
+#         if self.attention:
+#             self.att1 = AttentionLayer(ndf * 4) 
+#             self.att2 = AttentionLayer(ndf * 8)
+        
+#         for m in self.modules():
+#             if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
+#                 nn.init.kaiming_normal_(m.weight.data)
 
-
-#         final_block = [
-#             nn.Flatten(),
-#             nn.Linear(ndf*(512 if self.extended_seq else 256), 1)
-#         ]
-#         main += final_block
-
-#         self.main = nn.Sequential(*main)
-
-#         self.squashing_layer = nn.Sigmoid()
-
-    
+      
 #     def forward(self, x):
-#         x = self.main(x)
-#         # if self.wgan:
-#         #     x = self.squashing_layer(x)
+
+#         x = self.conv1(x)
+#         x = nn.LeakyReLU(0.2, inplace=True)(x)
+#         x = PhaseShuffle(shift_factor=2)(x)
+
+#         x = self.conv2(x)
+#         x = nn.LeakyReLU(0.2, inplace=True)(x)
+#         x = PhaseShuffle(shift_factor=2)(x)
+
+#         x = self.conv3(x)
+#         x = nn.LeakyReLU(0.2, inplace=True)(x)
+#         x = PhaseShuffle(shift_factor=2)(x)
+
+#         if self.attention:
+#             x = self.att1(x)
+        
+#         x = self.conv4(x)
+#         x = nn.LeakyReLU(0.2, inplace=True)(x)
+#         x = PhaseShuffle(shift_factor=2)(x)
+
+#         if self.attention:
+#             x = self.att2(x)
+        
+#         x = self.conv5(x)
+#         x = nn.LeakyReLU(0.2, inplace=True)(x)
+        
+#         if self.extended_seq:
+#             x = PhaseShuffle(shift_factor=2)(x)
+#             x = self.extra_layer(x)
+        
+#         x = nn.Flatten()(x)
+#         x = self.linear(x)
+        
+#         if not self.wgan:
+#             x = nn.Sigmoid()(x)
 
 #         return x
 
@@ -416,7 +449,7 @@ class Discriminative(nn.Module):
         self.ps3 = PhaseShuffle(shift_factor)
         self.ps4 = PhaseShuffle(shift_factor)
 
-        self.fc1 = nn.Linear(256 * model_size, 1)
+        self.linear = nn.Linear(256 * model_size, 1)
 
         for m in self.modules():
             if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
@@ -445,7 +478,7 @@ class Discriminative(nn.Module):
         x = x.view(-1, 256 * self.model_size)
 
 
-        return self.fc1(x)
+        return self.linear(x)
         
 
 
@@ -597,12 +630,12 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     
     # sampling random variables
     epsilon = torch.rand((batch_size, 1, 1), device=device, requires_grad=True)
-    epsilon = epsilon.expand(epsilon.size())
+    epsilon = epsilon.expand(batch.size())
     rnd_assgn = torch.empty((batch_size,1, latent_dim), device=device).uniform_(-1, 1)
 
     # computing the batch
     fake_batch = gen(rnd_assgn)
-    
+    # print(fake_batch.requires_grad)
     
     # computing the critic of real samples
     D_real = disc(batch)
@@ -614,20 +647,28 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     D_fake = D_fake.mean()
     D_fake.backward(one)
 
+    
+    
+
     # computing the gp loss
-    interpolation = epsilon * batch + (1-epsilon) * fake_batch
+    interpolation = epsilon * batch + (1-epsilon) * fake_batch.detach()
     D_interpolation = disc(interpolation)
     gradients = torch.autograd.grad(outputs=D_interpolation, inputs=interpolation,
                               grad_outputs=torch.ones_like(D_interpolation, device=device),
                               create_graph=True, retain_graph=True, only_inputs=True)[0]
-    # gradients = torch.randn((64, 1, 16384), device=device, requires_grad=True)
+    
     gradients = gradients.view(gradients.size(0),  -1)
     gradient_norm = gradients.norm(2, dim=1)
     gp = ((gradient_norm - 1)**2)
     gp = lmbda * gp.mean()
     gp.backward(one)
 
+    # print("disc grad: ", disc.conv1.weight.grad.norm().item())
+
     loss = D_fake - D_real + gp
+    W_loss = D_real - D_fake
+
+    print("D_real:", D_real.item()," D_fake:", D_fake.item(), " D_wass:", W_loss.item())
     # loss.backward()
 
     # gathering the loss and updating
@@ -636,13 +677,12 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     
     # disc_top = disc.main[0].weight.grad.norm()
     # disc_bottom = disc.main[-1].weight.grad.norm()
-    disc_top = 0
-    disc_bottom = 0
+    disc_top = disc.conv1.weight.grad.norm()
+    disc_bottom = disc.linear.weight.norm()
 
-    return loss, D_real, D_fake, gp, disc_top, disc_bottom
+    return loss.item(), D_real.item(), D_fake.item(), gp.item(), W_loss.item(), disc_top.item(), disc_bottom.item()
 
-
-
+    
 def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
     """Train the generator in the WGAN setting.
 
@@ -683,14 +723,17 @@ def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
     G.backward(n_ones)
     G_loss = -G
 
+    # print("Gen grad: ", gen.linear.weight.grad.norm().item())
+
     gen_optimizer.step()
 
     # gen_top = gen.linear.weight.grad.norm()
-    gen_top = 0
-    gen_bottom = 0
+    gen_top = gen.linear.weight.grad.norm()
+    gen_bottom = gen.conv5.conv1d.weight.grad.norm()
+    
     # gen_bottom = gen.main[-2].weight.grad.norm()
 
-    return G_loss, gen_top, gen_bottom
+    return G_loss.item(), gen_top.item(), gen_bottom.item()
     
 
 if __name__=='__main__':
