@@ -6,6 +6,55 @@ import numpy as np
 import time
 import torch
 import random
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+
+# def plot_grad_flow(named_parameters):
+#     '''Plots the gradients flowing through different layers in the net during training.
+#     Can be used for checking for possible gradient vanishing / exploding problems.
+    
+#     Usage: Plug this function in Trainer class after loss.backwards() as 
+#     "plot_grad_flow(self.model.named_parameters())" to visualize the gradient flow'''
+#     ave_grads = []
+#     max_grads= []
+#     layers = []
+#     for n, p in named_parameters:
+#         if(p.requires_grad) and ("bias" not in n):
+#             layers.append(n)
+#             ave_grads.append(p.grad.abs().mean())
+#             max_grads.append(p.grad.abs().max())
+#     plt.bar(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
+#     plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
+#     plt.hlines(0, 0, len(ave_grads)+1, lw=2, color="k" )
+#     plt.xticks(range(0,len(ave_grads), 1), layers, rotation="vertical")
+#     plt.xlim(left=0, right=len(ave_grads))
+#     plt.ylim(bottom = -0.001, top=0.02) # zoom in on the lower gradient regions
+#     plt.xlabel("Layers")
+#     plt.ylabel("average gradient")
+#     plt.title("Gradient flow")
+#     plt.grid(True)
+#     plt.legend([Line2D([0], [0], color="c", lw=4),
+#                 Line2D([0], [0], color="b", lw=4),
+#                 Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
+#     plt.show()
+
+# def plot_grad_flow(named_parameters):
+#     ave_grads = []
+#     layers = []
+#     for n, p in named_parameters:
+#         if(p.requires_grad) and ("bias" not in n):
+#             layers.append(n)
+#             ave_grads.append(p.grad.abs().mean())
+#     plt.plot(ave_grads, alpha=0.3, color="b")
+#     plt.hlines(0, 0, len(ave_grads)+1, linewidth=1, color="k" )
+#     plt.xticks(range(0,len(ave_grads), 1), layers, rotation="vertical")
+#     plt.xlim(xmin=0, xmax=len(ave_grads))
+#     plt.xlabel("Layers")
+#     plt.ylabel("average gradient")
+#     plt.title("Gradient flow")
+#     plt.grid(True)
+#     plt.show()
 
 class Transpose1dLayer(nn.Module):
 
@@ -125,155 +174,156 @@ def weights_init(m):
     #     nn.init.normal_(m.weight.data, 1.0, 0.02)
     #     nn.init.constant_(m.bias.data, 0)
 
-# class Generative(nn.Module):
-#     """Generative model which maps from noise in the latent space to samples in the data space.
-
-#     Args:
-#         ng (int): number of channels of the data space (generated samples). Default: 1.
-#         ngf (int): dimensionality factor of the generator. Default: 64.
-#         extended_seq (bool): set if extended sequences are required. Default: ``False``.
-#         latent_dim (int): number of channels of the latent space. Default: 100.
-#         post_proc (bool): set if the post processing is required. Default: ``True``.
-#         attention (bool): set if apply attention. Default: ``False``.
-#     """
-
-
-#     def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False):
-
-#         super(Generative, self).__init__()
-#         self.ngf = ngf
-#         self.extended_seq = extended_seq
-#         self.post_proc = post_proc
-#         self.attention = attention
-#         self.post_proc_filter_len = 512
-
-#         if self.extended_seq:
-#             self.linear = nn.Linear(latent_dim, 256*2*ngf)
-#         else:
-#             self.linear = nn.Linear(latent_dim, 256*ngf)
-
-#         self.conv1 = Transpose1dLayer(16 * ngf, 8 * ngf, 25, 1, upsample=4)
-#         self.conv2 = Transpose1dLayer(8 * ngf, 4 * ngf, 25, 1, upsample=4)
-#         self.conv3 = Transpose1dLayer(4 * ngf, 2 * ngf, 25, 1, upsample=4)
-#         self.conv4 = Transpose1dLayer(2 * ngf, ngf, 25, 1, upsample=4)
-#         self.conv5 = Transpose1dLayer(ngf, ng, 25, 1, upsample=4)
-
-#         if self.attention:
-#             self.att1 = AttentionLayer(ngf * 4)
-#             self.att2 = AttentionLayer(ngf * 2) 
-
-#         if self.extended_seq:
-#             self.extended = Transpose1dLayer(32 * ngf, ngf * 16, 25, 1, upsample=4)
-
-#         if self.post_proc:
-#             self.post_proc_layer = nn.Conv1d(ng, ng, self.post_proc_filter_len)
-
-#         for m in self.modules():
-#             if isinstance(m, nn.ConvTranspose1d) or isinstance(m, nn.Linear):
-#                 nn.init.kaiming_normal_(m.weight.data)
-
-#     def forward(self, x):
-#         x = self.linear(x)
-#         x = nn.ReLU(inplace=True)(x)
-#         # x = nn.ReLU()(x)
-#         if self.extended_seq:
-#             x = x.view(x.shape[0], 2 * 16 * self.ngf, 16)
-#         else:
-#             x = x.view(x.shape[0], 16 * self.ngf, 16)
-
-
-#         if self.extended_seq:
-#             x = self.extended(x)
-#             x = nn.ReLU(inplace=True)(x)
-
-#         x = self.conv1(x)
-#         x = nn.ReLU(inplace=True)(x)
-
-#         x = self.conv2(x)
-#         x = nn.ReLU(inplace=True)(x)
-
-#         # check for attention
-#         if self.attention:
-#             x = self.att1(x)
-
-#         x = self.conv3(x)
-#         x = nn.ReLU(inplace=True)(x)
-
-#         # check for attention
-#         if self.attention:
-#             x = self.att2(x)
-
-#         x = self.conv4(x)
-#         x = nn.ReLU(inplace=True)(x)
-
-#         x = self.conv5(x)
-#         x = nn.Tanh()(x)
-
-        
-
-#         if self.post_proc:
-
-#             if (self.post_proc_filter_len % 2) == 0:
-#                 pad_left = self.post_proc_filter_len // 2
-#                 pad_right = pad_left - 1
-#             else:
-#                 pad_left = (self.post_proc_filter_len - 1) // 2
-#                 pad_right = pad_left
-
-#             x = nn.functional.pad(x, (pad_left, pad_right))
-#             x = self.post_proc_layer(x)
-
-#         return x
-
-    
-
 class Generative(nn.Module):
-    def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False): 
+    """Generative model which maps from noise in the latent space to samples in the data space.
+
+    Args:
+        ng (int): number of channels of the data space (generated samples). Default: 1.
+        ngf (int): dimensionality factor of the generator. Default: 64.
+        extended_seq (bool): set if extended sequences are required. Default: ``False``.
+        latent_dim (int): number of channels of the latent space. Default: 100.
+        post_proc (bool): set if the post processing is required. Default: ``True``.
+        attention (bool): set if apply attention. Default: ``False``.
+    """
+
+
+    def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False):
+
         super(Generative, self).__init__()
-        
+        self.ngf = ngf
+        self.extended_seq = extended_seq
+        self.post_proc = post_proc
+        self.attention = attention
+        self.post_proc_filter_len = 512
 
-        self.model_size = ngf  # d
-        self.num_channels = ng  # c
-        self.latent_di = latent_dim
-        self.post_proc_filt_len = 512
-        # "Dense" is the same meaning as fully connection.
-        self.linear = nn.Linear(latent_dim, 256 * self.model_size)
+        if self.extended_seq:
+            self.linear = nn.Linear(latent_dim, 256*2*ngf)
+        else:
+            self.linear = nn.Linear(latent_dim, 256*ngf)
 
-   
-        stride = 1
-        upsample = 4
-        self.conv1 = Transpose1dLayer(16 * self.model_size, 8 * self.model_size, 25, stride, upsample=upsample)
-        self.conv2 = Transpose1dLayer(8 * self.model_size, 4 * self.model_size, 25, stride, upsample=upsample)
-        self.conv3 = Transpose1dLayer(4 * self.model_size, 2 * self.model_size, 25, stride, upsample=upsample)
-        self.conv4 = Transpose1dLayer(2 * self.model_size, self.model_size, 25, stride, upsample=upsample)
-        self.conv5 = Transpose1dLayer(self.model_size, ng, 25, stride, upsample=upsample)
+        self.conv1 = Transpose1dLayer(16 * ngf, 8 * ngf, 25, 1, upsample=4)
+        self.conv2 = Transpose1dLayer(8 * ngf, 4 * ngf, 25, 1, upsample=4)
+        self.conv3 = Transpose1dLayer(4 * ngf, 2 * ngf, 25, 1, upsample=4)
+        self.conv4 = Transpose1dLayer(2 * ngf, ngf, 25, 1, upsample=4)
+        self.conv5 = Transpose1dLayer(ngf, ng, 25, 1, upsample=4)
 
-        if self.post_proc_filt_len:
-            self.ppfilter1 = nn.Conv1d(ng, ng, self.post_proc_filt_len)
+        if self.attention:
+            self.att1 = AttentionLayer(ngf * 4)
+            self.att2 = AttentionLayer(ngf * 2) 
+
+        if self.extended_seq:
+            self.extended = Transpose1dLayer(32 * ngf, ngf * 16, 25, 1, upsample=4)
+
+        if self.post_proc:
+            self.post_proc_layer = nn.Conv1d(ng, ng, self.post_proc_filter_len)
 
         for m in self.modules():
             if isinstance(m, nn.ConvTranspose1d) or isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight.data)
 
     def forward(self, x):
-        x = self.linear(x).view(-1, 16 * self.model_size, 16)
-        x = torch.relu(x)
+        x = self.linear(x)
+        
+        # x = nn.ReLU()(x)
+        if self.extended_seq:
+            x = x.view(x.shape[0], 2 * 16 * self.ngf, 16)
+        else:
+            x = x.view(x.shape[0], 16 * self.ngf, 16)
+
+        x = nn.ReLU(inplace=True)(x)
+
+        if self.extended_seq:
+            x = self.extended(x)
+            x = nn.ReLU(inplace=True)(x)
+
+        x = self.conv1(x)
+        x = nn.ReLU(inplace=True)(x)
+
+        x = self.conv2(x)
+        x = nn.ReLU(inplace=True)(x)
+
+        # check for attention
+        if self.attention:
+            x = self.att1(x)
+
+        x = self.conv3(x)
+        x = nn.ReLU(inplace=True)(x)
+
+        # check for attention
+        if self.attention:
+            x = self.att2(x)
+
+        x = self.conv4(x)
+        x = nn.ReLU(inplace=True)(x)
+
+        x = self.conv5(x)
+        x = nn.Tanh()(x)
+
+        
+
+        if self.post_proc:
+
+            if (self.post_proc_filter_len % 2) == 0:
+                pad_left = self.post_proc_filter_len // 2
+                pad_right = pad_left - 1
+            else:
+                pad_left = (self.post_proc_filter_len - 1) // 2
+                pad_right = pad_left
+
+            x = nn.functional.pad(x, (pad_left, pad_right))
+            x = self.post_proc_layer(x)
+
+        return x
+
+    
+
+# class Generative(nn.Module):
+#     def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False): 
+#         super(Generative, self).__init__()
+        
+
+#         self.model_size = ngf  # d
+#         self.num_channels = ng  # c
+#         self.latent_di = latent_dim
+#         self.post_proc_filt_len = 512
+#         # "Dense" is the same meaning as fully connection.
+#         self.linear = nn.Linear(latent_dim, 256 * self.model_size)
+
+   
+#         stride = 1
+#         upsample = 4
+#         self.conv1 = Transpose1dLayer(16 * self.model_size, 8 * self.model_size, 25, stride, upsample=upsample)
+#         self.conv2 = Transpose1dLayer(8 * self.model_size, 4 * self.model_size, 25, stride, upsample=upsample)
+#         self.conv3 = Transpose1dLayer(4 * self.model_size, 2 * self.model_size, 25, stride, upsample=upsample)
+#         self.conv4 = Transpose1dLayer(2 * self.model_size, self.model_size, 25, stride, upsample=upsample)
+#         self.conv5 = Transpose1dLayer(self.model_size, ng, 25, stride, upsample=upsample)
+
+#         # if self.post_proc_filt_len:
+#         #     self.ppfilter1 = nn.Conv1d(ng, ng, self.post_proc_filt_len)
+
+#         for m in self.modules():
+#             if isinstance(m, nn.ConvTranspose1d) or isinstance(m, nn.Linear):
+#                 nn.init.kaiming_normal_(m.weight.data)
+
+#     def forward(self, x):
+#         x = self.linear(x).view(-1, 16 * self.model_size, 16)
+#         x = torch.relu(x)
 
 
-        x = torch.relu(self.conv1(x))
+#         x = torch.relu(self.conv1(x))
       
 
-        x = torch.relu(self.conv2(x))
+#         x = torch.relu(self.conv2(x))
 
 
-        x = torch.relu(self.conv3(x))
+#         x = torch.relu(self.conv3(x))
 
 
-        x = torch.relu(self.conv4(x))
+#         x = torch.relu(self.conv4(x))
 
 
-        output = torch.tanh(self.conv5(x))
-        return output
+#         output = torch.tanh(self.conv5(x))
+#         return output
 
 class PhaseShuffle(nn.Module):
     """Phase Shuffle layer as described by https://arxiv.org/pdf/1802.04208.pdf
@@ -287,198 +337,199 @@ class PhaseShuffle(nn.Module):
         super(PhaseShuffle, self).__init__()
         self.shift_factor = shift_factor
 
-    # def forward(self, x):
-
-    #     seq_len = x.shape[-1]
-    #     random_shift = torch.randint(low = -self.shift_factor, high= self.shift_factor, size=(x.shape[0],))
-  
-    #     abs_shift = torch.abs(random_shift)
-
-    #     shifted_batch = torch.empty(x.size())
-    #     for idx, sample in enumerate(torch.split(x, 1, dim=0)):
-
-    #         current_shift = abs_shift[idx]
-    #         # sample = torch.unsqueeze(sample, dim=0)
- 
-    #         if (abs_shift[idx] == 0):
-    #             shifted = sample
-    #         elif (abs_shift[idx] > 0):
-    #             # shifted = torch.empty(sample.size(), device=torch.device("cuda"))
-    #             padded = torch.nn.functional.pad(sample, (current_shift, 0), mode='circular')
-    #             shifted = torch.narrow(padded, dim=-1, start=0, length=seq_len)
-    #         else:
-    #             padded = torch.nn.functional.pad(sample, (0, current_shift), mode='circular')
-    #             shifted = torch.narrow(padded, dim=-1, start=x.shape[-1] - seq_len, length=seq_len)
- 
-    #         shifted_batch[idx] = shifted
-
-    #     # # x = torch.cat(shifted_batch, dim=0)
-    #     # x = shifted_batch
-
-    #     return x
-
     def forward(self, x):
-        if self.shift_factor == 0:
-            return x
-        # uniform in (L, R)
-        k_list = torch.Tensor(x.shape[0]).random_(0, 2 * self.shift_factor + 1) - self.shift_factor
-        k_list = k_list.numpy().astype(int)
 
-        # Combine sample indices into lists so that less shuffle operations
-        # need to be performed
-        k_map = {}
-        for idx, k in enumerate(k_list):
-            k = int(k)
-            if k not in k_map:
-                k_map[k] = []
-            k_map[k].append(idx)
+        seq_len = x.shape[-1]
+        random_shift = torch.randint(low = -self.shift_factor, high= self.shift_factor, size=(x.shape[0],))
+  
+        abs_shift = torch.abs(random_shift)
 
-        # Make a copy of x for our output
-        x_shuffle = x.clone()
+        shifted_batch = torch.empty(x.size())
+        for idx, sample in enumerate(torch.split(x, 1, dim=0)):
 
-        # Apply shuffle to each sample
-        for k, idxs in k_map.items():
-            if k > 0:
-                x_shuffle[idxs] = torch.nn.functional.pad(x[idxs][..., :-k], (k, 0), mode='reflect')
+            current_shift = abs_shift[idx]
+            # sample = torch.unsqueeze(sample, dim=0)
+ 
+            if (abs_shift[idx] == 0):
+                shifted = sample
+            elif (abs_shift[idx] > 0):
+                # shifted = torch.empty(sample.size(), device=torch.device("cuda"))
+                padded = torch.nn.functional.pad(sample, (current_shift, 0), mode='circular')
+                shifted = torch.narrow(padded, dim=-1, start=0, length=seq_len)
             else:
-                x_shuffle[idxs] = torch.nn.functional.pad(x[idxs][..., -k:], (0, -k), mode='reflect')
+                padded = torch.nn.functional.pad(sample, (0, current_shift), mode='circular')
+                shifted = torch.narrow(padded, dim=-1, start=x.shape[-1] - seq_len, length=seq_len)
+ 
+            shifted_batch[idx] = shifted
 
-        assert x_shuffle.shape == x.shape, "{}, {}".format(x_shuffle.shape,
-                                                       x.shape)
-        return x_shuffle
+        # # x = torch.cat(shifted_batch, dim=0)
+        # x = shifted_batch
+
+        return x
+
+    # def forward(self, x):
+    #     if self.shift_factor == 0:
+    #         return x
+    #     # uniform in (L, R)
+    #     k_list = torch.Tensor(x.shape[0]).random_(0, 2 * self.shift_factor + 1) - self.shift_factor
+    #     k_list = k_list.numpy().astype(int)
+
+    #     # Combine sample indices into lists so that less shuffle operations
+    #     # need to be performed
+    #     k_map = {}
+    #     for idx, k in enumerate(k_list):
+    #         k = int(k)
+    #         if k not in k_map:
+    #             k_map[k] = []
+    #         k_map[k].append(idx)
+
+    #     # Make a copy of x for our output
+    #     x_shuffle = x.clone()
+
+    #     # Apply shuffle to each sample
+    #     for k, idxs in k_map.items():
+    #         if k > 0:
+    #             x_shuffle[idxs] = torch.nn.functional.pad(x[idxs][..., :-k], (k, 0), mode='reflect')
+    #         else:
+    #             x_shuffle[idxs] = torch.nn.functional.pad(x[idxs][..., -k:], (0, -k), mode='reflect')
+
+    #     assert x_shuffle.shape == x.shape, "{}, {}".format(x_shuffle.shape,
+    #                                                    x.shape)
+    #     return x_shuffle
 
         
-
-# class Discriminative(nn.Module):
-#     """Discriminative model of the gan: could act as critic or catch fake samples depending on the training algorithm.
-
-#     Args:
-#         ng (int): number of channels of the data space (generated samples). Default: 1.
-#         ndf (ndf): dimensionality factor of the discriminator. Default: 64.
-#         extended_seq (bool): extended_seq (bool): set if extended sequences are required. Default: ``False``.
-#         wgan (bool): set if wgan is used as training algorithm. Default: ``False``.
-#         attention (bool): set if apply attention. Default: ``False``.
-#     """
-
-#     def __init__(self, ng=1, ndf=64, extended_seq=False, wgan=False, attention=False):
-
-#         super(Discriminative, self).__init__()
-
-#         self.ng = ng
-#         self.ndf = ndf
-#         self.extended_seq = extended_seq
-#         self.wgan = wgan
-#         self.attention = attention
-
-#         self.conv1 = nn.Conv1d(ng, ndf, 25, 4, 11, bias=True)
-#         self.conv2 = nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True)
-#         self.conv3 = nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True)
-#         self.conv4 = nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True)
-#         self.conv5 = nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True)
-
-#         self.linear = nn.Linear(ndf*(512 if self.extended_seq else 256), 1)
-
-#         if self.extended_seq:
-#             self.extra_layer = nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True)
-
-#         if self.attention:
-#             self.att1 = AttentionLayer(ndf * 4) 
-#             self.att2 = AttentionLayer(ndf * 8)
-        
-#         for m in self.modules():
-#             if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
-#                 nn.init.kaiming_normal_(m.weight.data)
-
-      
-#     def forward(self, x):
-
-#         x = self.conv1(x)
-#         x = nn.LeakyReLU(0.2, inplace=True)(x)
-#         x = PhaseShuffle(shift_factor=2)(x)
-
-#         x = self.conv2(x)
-#         x = nn.LeakyReLU(0.2, inplace=True)(x)
-#         x = PhaseShuffle(shift_factor=2)(x)
-
-#         x = self.conv3(x)
-#         x = nn.LeakyReLU(0.2, inplace=True)(x)
-#         x = PhaseShuffle(shift_factor=2)(x)
-
-#         if self.attention:
-#             x = self.att1(x)
-        
-#         x = self.conv4(x)
-#         x = nn.LeakyReLU(0.2, inplace=True)(x)
-#         x = PhaseShuffle(shift_factor=2)(x)
-
-#         if self.attention:
-#             x = self.att2(x)
-        
-#         x = self.conv5(x)
-#         x = nn.LeakyReLU(0.2, inplace=True)(x)
-        
-#         if self.extended_seq:
-#             x = PhaseShuffle(shift_factor=2)(x)
-#             x = self.extra_layer(x)
-        
-#         x = nn.Flatten()(x)
-#         x = self.linear(x)
-        
-#         if not self.wgan:
-#             x = nn.Sigmoid()(x)
-
-#         return x
 
 class Discriminative(nn.Module):
-    def __init__(self, num_channels=1, model_size=64, extended_seq=False, wgan=False, attention=False):
+    """Discriminative model of the gan: could act as critic or catch fake samples depending on the training algorithm.
+
+    Args:
+        ng (int): number of channels of the data space (generated samples). Default: 1.
+        ndf (ndf): dimensionality factor of the discriminator. Default: 64.
+        extended_seq (bool): extended_seq (bool): set if extended sequences are required. Default: ``False``.
+        wgan (bool): set if wgan is used as training algorithm. Default: ``False``.
+        attention (bool): set if apply attention. Default: ``False``.
+    """
+
+    def __init__(self, ng=1, ndf=64, extended_seq=False, wgan=False, attention=False, phase_shift=2):
+
         super(Discriminative, self).__init__()
-        shift_factor = 2
-        self.model_size = model_size  # d
-        self.num_channels = num_channels  # c
-        self.shift_factor = 2  # n
-        self.alpha = 0.2
 
-        self.conv1 = nn.Conv1d(num_channels, model_size, 25, stride=4, padding=11)
-        self.conv2 = nn.Conv1d(model_size, 2 * model_size, 25, stride=4, padding=11)
-        self.conv3 = nn.Conv1d(2 * model_size, 4 * model_size, 25, stride=4, padding=11)
-        self.conv4 = nn.Conv1d(4 * model_size, 8 * model_size, 25, stride=4, padding=11)
-        self.conv5 = nn.Conv1d(8 * model_size, 16 * model_size, 25, stride=4, padding=11)
+        self.ng = ng
+        self.ndf = ndf
+        self.extended_seq = extended_seq
+        self.wgan = wgan
+        self.attention = attention
+        self.shift_factor = phase_shift
 
-        self.ps1 = PhaseShuffle(shift_factor)
-        self.ps2 = PhaseShuffle(shift_factor)
-        self.ps3 = PhaseShuffle(shift_factor)
-        self.ps4 = PhaseShuffle(shift_factor)
+        self.conv1 = nn.Conv1d(ng, ndf, 25, 4, 11, bias=True)
+        self.conv2 = nn.Conv1d(ndf, ndf * 2, 25, 4, 11, bias=True)
+        self.conv3 = nn.Conv1d(ndf * 2, ndf * 4, 25, 4, 11, bias=True)
+        self.conv4 = nn.Conv1d(ndf * 4, ndf * 8, 25, 4, 11, bias=True)
+        self.conv5 = nn.Conv1d(ndf * 8, ndf*16, 25, 4, 11, bias=True)
 
-        self.linear = nn.Linear(256 * model_size, 1)
+        self.linear = nn.Linear(ndf*(512 if self.extended_seq else 256), 1)
 
+        # if self.extended_seq:
+        #     self.extra_layer = nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True)
+
+        if self.attention:
+            self.att1 = AttentionLayer(ndf * 4) 
+            self.att2 = AttentionLayer(ndf * 8)
+        
         for m in self.modules():
             if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight.data)
 
+      
     def forward(self, x):
-        x = nn.functional.leaky_relu(self.conv1(x), negative_slope=self.alpha)
 
-        x = self.ps1(x)
+        x = self.conv1(x)
+        x = nn.LeakyReLU(0.2, inplace=True)(x)
+        x = PhaseShuffle(shift_factor=self.shift_factor)(x)
 
-        x = nn.functional.leaky_relu(self.conv2(x), negative_slope=self.alpha)
+        x = self.conv2(x)
+        x = nn.LeakyReLU(0.2, inplace=True)(x)
+        x = PhaseShuffle(shift_factor=self.shift_factor)(x)
 
-        x = self.ps2(x)
+        x = self.conv3(x)
+        x = nn.LeakyReLU(0.2, inplace=True)(x)
+        x = PhaseShuffle(shift_factor=self.shift_factor)(x)
 
-        x = nn.functional.leaky_relu(self.conv3(x), negative_slope=self.alpha)
+        if self.attention:
+            x = self.att1(x)
+        
+        x = self.conv4(x)
+        x = nn.LeakyReLU(0.2, inplace=True)(x)
+        x = PhaseShuffle(shift_factor=self.shift_factor)(x)
 
-        x = self.ps3(x)
+        if self.attention:
+            x = self.att2(x)
+        
+        x = self.conv5(x)
+        x = nn.LeakyReLU(0.2, inplace=True)(x)
+        
+        if self.extended_seq:
+            x = PhaseShuffle(shift_factor=self.shift_factor)(x)
+            x = self.extra_layer(x)
+        
+        x = nn.Flatten()(x)
+        x = self.linear(x)
+        
+        if not self.wgan:
+            x = nn.Sigmoid()(x)
 
-        x = nn.functional.leaky_relu(self.conv4(x), negative_slope=self.alpha)
+        return x
 
-        x = self.ps4(x)
+# class Discriminative(nn.Module):
+#     def __init__(self, num_channels=1, model_size=64, extended_seq=False, wgan=False, attention=False, phase_shift=2):
+#         super(Discriminative, self).__init__()
+#         shift_factor = 2
+#         self.model_size = model_size  # d
+#         self.num_channels = num_channels  # c
+#         self.shift_factor = phase_shift  # n
+#         self.alpha = 0.2
 
-        x = nn.functional.leaky_relu(self.conv5(x), negative_slope=self.alpha)
+#         self.conv1 = nn.Conv1d(num_channels, model_size, 25, stride=4, padding=11)
+#         self.conv2 = nn.Conv1d(model_size, 2 * model_size, 25, stride=4, padding=11)
+#         self.conv3 = nn.Conv1d(2 * model_size, 4 * model_size, 25, stride=4, padding=11)
+#         self.conv4 = nn.Conv1d(4 * model_size, 8 * model_size, 25, stride=4, padding=11)
+#         self.conv5 = nn.Conv1d(8 * model_size, 16 * model_size, 25, stride=4, padding=11)
+
+#         self.ps1 = PhaseShuffle(self.shift_factor)
+#         self.ps2 = PhaseShuffle(self.shift_factor)
+#         self.ps3 = PhaseShuffle(self.shift_factor)
+#         self.ps4 = PhaseShuffle(self.shift_factor)
+
+#         self.linear = nn.Linear(256 * model_size, 1)
+
+#         for m in self.modules():
+#             if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
+#                 nn.init.kaiming_normal_(m.weight.data)
+
+#     def forward(self, x):
+#         x = nn.functional.leaky_relu(self.conv1(x), negative_slope=self.alpha)
+
+#         x = self.ps1(x)
+
+#         x = nn.functional.leaky_relu(self.conv2(x), negative_slope=self.alpha)
+
+#         x = self.ps2(x)
+
+#         x = nn.functional.leaky_relu(self.conv3(x), negative_slope=self.alpha)
+
+#         x = self.ps3(x)
+
+#         x = nn.functional.leaky_relu(self.conv4(x), negative_slope=self.alpha)
+
+#         x = self.ps4(x)
+
+#         x = nn.functional.leaky_relu(self.conv5(x), negative_slope=self.alpha)
 
 
-        x = x.view(-1, 256 * self.model_size)
+#         x = x.view(-1, 256 * self.model_size)
 
 
-        return self.linear(x)
+#         return self.linear(x)
         
 
 
@@ -593,7 +644,7 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent
 
     return gen_loss.item(), real_loss.item(), fake_loss.item(), disc_loss.item(), D_x, D_G_z1, D_G_z2, disc_top.item(), disc_bottom.item(), gen_top.item(), gen_bottom.item()
 
-def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
+def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, requires_grad, device):
     """Train the discriminator in the WGAN setting.
 
     Args:
@@ -622,16 +673,17 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     disc.zero_grad()
 
     # getting the batch size
-    batch_size = batch.shape[0] 
+    batch_size = batch.shape[0]
+    batch.requires_grad_(False)
 
     # vectors of 1's and -1's
-    one = torch.tensor(1, dtype=torch.float, device=device, requires_grad=True)
+    one = torch.tensor(1, dtype=torch.float, device=device)
     n_one = -1 * one
     
     # sampling random variables
-    epsilon = torch.rand((batch_size, 1, 1), device=device, requires_grad=True)
+    epsilon = torch.rand((batch_size, 1, 1), device=device)
     epsilon = epsilon.expand(batch.size())
-    rnd_assgn = torch.empty((batch_size,1, latent_dim), device=device).uniform_(-1, 1)
+    rnd_assgn = torch.empty((batch_size,1, latent_dim), device=device, requires_grad=False).uniform_(-1, 1)
 
     # computing the batch
     fake_batch = gen(rnd_assgn)
@@ -640,39 +692,52 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     # computing the critic of real samples
     D_real = disc(batch)
     D_real = D_real.mean()
-    D_real.backward(n_one)
+    if requires_grad:
+        D_real.backward(n_one)
 
     # computing the critic of fake samples
     D_fake = disc(fake_batch.detach())
     D_fake = D_fake.mean()
-    D_fake.backward(one)
+    if requires_grad:
+        D_fake.backward(one)
 
     
     
 
     # computing the gp loss
-    interpolation = epsilon * batch + (1-epsilon) * fake_batch.detach()
+    interpolation = epsilon * batch.detach() + (1-epsilon) * fake_batch.detach()
+    interpolation.requires_grad_(True)
     D_interpolation = disc(interpolation)
     gradients = torch.autograd.grad(outputs=D_interpolation, inputs=interpolation,
                               grad_outputs=torch.ones_like(D_interpolation, device=device),
                               create_graph=True, retain_graph=True, only_inputs=True)[0]
     
     gradients = gradients.view(gradients.size(0),  -1)
-    gradient_norm = gradients.norm(2, dim=1)
-    gp = ((gradient_norm - 1)**2)
-    gp = lmbda * gp.mean()
-    gp.backward(one)
+    # gradient_norm = gradients.norm(2, dim=1)
+    # gp = ((gradient_norm - 1)**2)
+    # gp = lmbda * gp.mean()
+    gp = lmbda * ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+    if requires_grad:
+        gp.backward(one)
 
     # print("disc grad: ", disc.conv1.weight.grad.norm().item())
 
     loss = D_fake - D_real + gp
     W_loss = D_real - D_fake
 
+    ave_grads = []
+    if requires_grad:
+        for n, p in disc.named_parameters():
+            if(p.requires_grad) and ("bias" not in n):
+                ave_grads.append(p.grad.abs().mean().item())
+
     # print("D_real:", D_real.item()," D_fake:", D_fake.item(), " D_wass:", W_loss.item())
     # loss.backward()
 
     # gathering the loss and updating
-    disc_optimizer.step()
+    # plot_grad_flow(disc.named_parameters())
+    if requires_grad:
+        disc_optimizer.step()
         
     
     # disc_top = disc.main[0].weight.grad.norm()
@@ -680,7 +745,9 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, device):
     disc_top = disc.conv1.weight.grad.norm()
     disc_bottom = disc.linear.weight.norm()
 
-    return loss.item(), D_real.item(), D_fake.item(), gp.item(), W_loss.item(), disc_top.item(), disc_bottom.item()
+    return loss.item(), D_real.item(), D_fake.item(), gp.item(), W_loss.item(), disc_top.item(), disc_bottom.item(), ave_grads
+
+
 
     
 def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
@@ -710,6 +777,7 @@ def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
     gen.zero_grad()
 
     batch_size = batch.shape[0]
+    batch.requires_grad_(False)
 
     n_ones = -1 * torch.tensor(1, dtype=torch.float, device=device)
     # sampling a batch of latent variables
@@ -723,8 +791,13 @@ def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
     G.backward(n_ones)
     G_loss = -G
 
-    # print("Gen grad: ", gen.linear.weight.grad.norm().item())
+    ave_grads = []
+    for n, p in gen.named_parameters():
+        if(p.requires_grad) and ("bias" not in n):
+            ave_grads.append(p.grad.abs().mean().item())
 
+    # print("Gen grad: ", gen.linear.weight.grad.norm().item())
+    # plot_grad_flow(gen.named_parameters())
     gen_optimizer.step()
 
     # gen_top = gen.linear.weight.grad.norm()
@@ -733,7 +806,7 @@ def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
     
     # gen_bottom = gen.main[-2].weight.grad.norm()
 
-    return G_loss.item(), gen_top.item(), gen_bottom.item()
+    return G_loss.item(), gen_top.item(), gen_bottom.item(), ave_grads
     
 
 if __name__=='__main__':

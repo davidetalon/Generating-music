@@ -12,12 +12,123 @@ import os
 from pathlib import Path
 import numpy as np
 import scipy
+import pescador
 import math
 import time
 
 
 
-class MusicDataset(Dataset):
+# class MusicDataset(Dataset):
+#     """Music dataset: get a dataset of fixed-sized chunks from audio files.
+    
+#     Args:
+#         source_filepath (String): root folder of the dataset.
+#         seq_len (int): length of the chunks. Default: 512
+#         normalize (bool): set if the normalization is required. Default: ``True``
+#         transform (): tranformations to apply to samples. Default: ``None``
+
+#     """
+
+#     def __init__(self, source_filepath, seq_len=512, normalize=True, transform = None):
+
+#         source_folder = Path(source_filepath)
+#         print(source_folder)
+#         self.seq_len = seq_len
+#         # get songs' path
+#         songs = []
+#         for root, dirs, files in os.walk(source_folder):
+#             for name in files:
+#                 songs.append(os.path.join(root, name))
+        
+#         # let's restrict to wav files (damn .DS_Store)
+#         songs = [song for song in songs if song.endswith('.wav')]
+
+
+
+#         # self.transform = transform
+#         # self.songs = songs
+
+#         # we cannot waste songs - let's analyze the entire dataset and divide songs into chunks
+#         # each chunk will be a sample - notice that we could need to load multiple times the same file
+
+#         # notice that each song could have different number of chunks, let's save path and idx of chunk
+#         dataset_chunks = []
+
+#         for song in songs:
+            
+#             # let's exploit torchaudio to read songs' info
+#             data = torchaudio.info(song)
+
+#             # get the number of chunks in the audio file
+#             n_chunks = int((data[0].length/data[0].channels)/self.seq_len)
+
+#             # for each audiofile save the chunks - easy to retrieve
+#             for idx in range(n_chunks):
+#                 dataset_chunks.append({"path":song, "idx":idx})
+
+#         self.dataset_chunks = dataset_chunks
+#         self.transform = transform
+
+#         print("Dataset loaded: %d songs, %d chunks." % (len(songs), len(dataset_chunks)))
+        
+#     def __len__(self):
+
+#         # we are working with unpaired songs, we could have different sizes
+#         return len(self.dataset_chunks)
+
+
+    # def __getitem__(self, idx):
+        
+        
+    #     chunk_info = self.dataset_chunks[idx]
+    #     # # load the song
+    #     sample = song_loader(chunk_info, self.seq_len)
+    #     sample = sample[0]
+    #     sample = torch.unsqueeze(sample, dim=0)
+
+
+    #     # # # get the selected chunk
+    #     # # chunks = torch.split(song, self.seq_len, dim=-1)
+        
+    #     # # # print(song_path['idx'])
+    #     # # sample = chunks[song_path['idx']]
+
+    #     if self.transform:
+    #         sample = self.transform(sample)
+
+
+    #     return sample
+
+def generate_rnd_chunk(track_path, track_len, seq_len, normalize=True, transform=None):
+
+    rnd = torch.randint(track_len - seq_len, (1,))
+    rnd = int(rnd)
+    sample, _ = torchaudio.load(track_path, normalization=normalize, num_frames=seq_len, offset=rnd)
+    # print(sample[0].shape)
+    sample = sample[0].type(torch.float32)
+    sample = torch.unsqueeze(sample, dim=0)
+    if transform:
+        sample = transform(sample)
+    yield sample
+
+def generate_chunk(track_path, track_len, seq_len, hop, normalize=True, transform=None):
+
+    for idx in range(0, track_len - seq_len, hop):
+        # print(track_len, idx,range(0, track_len - seq_len, seq_len)[-1], idx + seq_len > track_len)
+        # info = torchaudio.info(track_path)
+        # print(info)
+        # sample, _ = torchaudio.load(track_path, normalization=normalize)
+        # print(sample.shape)
+        sample, _ = torchaudio.load(track_path, normalization=normalize, num_frames=seq_len, offset=idx)
+        # print(sample[0].shape)
+        sample = sample[0].type(torch.float32)
+        sample = torch.unsqueeze(sample, dim=0)
+        if transform:
+            sample = transform(sample)
+        yield sample
+
+# let's build an iterable-style dataset - exploit random chunks over the files
+class MusicDataset(torch.utils.data.IterableDataset):
     """Music dataset: get a dataset of fixed-sized chunks from audio files.
     
     Args:
@@ -28,11 +139,20 @@ class MusicDataset(Dataset):
 
     """
 
-    def __init__(self, source_filepath, seq_len=512, normalize=True, transform = None):
-
+    def __init__(self, source_filepath, seq_len=512, hop=16384, normalize=True, transform=None, restart_streams=False):
+        super(MusicDataset).__init__()
         source_folder = Path(source_filepath)
-        print(source_folder)
         self.seq_len = seq_len
+        
+        if hop==None:
+            hop = seq_len
+        
+        self.hop = hop
+
+        self.normalize = normalize
+        self.transform = transform
+    
+
         # get songs' path
         songs = []
         for root, dirs, files in os.walk(source_folder):
@@ -42,61 +162,48 @@ class MusicDataset(Dataset):
         # let's restrict to wav files (damn .DS_Store)
         songs = [song for song in songs if song.endswith('.wav')]
 
-
-
-        # self.transform = transform
-        # self.songs = songs
-
-        # we cannot waste songs - let's analyze the entire dataset and divide songs into chunks
-        # each chunk will be a sample - notice that we could need to load multiple times the same file
-
-        # notice that each song could have different number of chunks, let's save path and idx of chunk
-        dataset_chunks = []
-
+        
+        # get songs length
+        data = []
         for song in songs:
-            
-            # let's exploit torchaudio to read songs' info
-            data = torchaudio.info(song)
+            # get audio info
+            song_info = torchaudio.info(song)
+            data.append({"path":song, "len":int(song_info[0].length/song_info[0].channels)})
 
-            # get the number of chunks in the audio file
-            n_chunks = int((data[0].length/data[0].channels)/self.seq_len)
+        self.data = data
 
-            # for each audiofile save the chunks - easy to retrieve
-            for idx in range(n_chunks):
-                dataset_chunks.append({"path":song, "idx":idx})
+        # build streams from single files
+        streams = [pescador.Streamer(generate_chunk, track['path'], track['len'], seq_len, hop, normalize, transform) for track in data]
 
-        self.dataset_chunks = dataset_chunks
-        self.transform = transform
+        # muxing different streams
+        if restart_streams:
+            streams = [pescador.Streamer(generate_rnd_chunk, track['path'], track['len'], seq_len, normalize, transform) for track in data]
+            self.mux = pescador.ShuffledMux(streams)
+        else:
+            streams = [pescador.Streamer(generate_chunk, track['path'], track['len'], seq_len, hop, normalize, transform) for track in data]
+            self.mux = pescador.StochasticMux(streams, len(streams), rate=None, mode='exhaustive')
 
-        print("Dataset loaded: %d songs, %d chunks." % (len(songs), len(dataset_chunks)))
+
+    def __iter__(self):
+        return self.mux.iterate()
+
+        # if self.transform:
+        #     self.tranform(sample)
         
+        # return sample
+        # return torch.empty(self.seq_len)
+
     def __len__(self):
-
-        # we are working with unpaired songs, we could have different sizes
-        return len(self.dataset_chunks)
-
-
-    def __getitem__(self, idx):
+        num_batches = 0
+        for song in self.data:
+            batches = int((song['len'] - self.seq_len)/self.hop)
+            num_batches += batches
+        return num_batches
         
-        
-        chunk_info = self.dataset_chunks[idx]
-        # # load the song
-        sample = song_loader(chunk_info, self.seq_len)
-        sample = sample[0]
-        sample = torch.unsqueeze(sample, dim=0)
 
 
-        # # # get the selected chunk
-        # # chunks = torch.split(song, self.seq_len, dim=-1)
-        
-        # # # print(song_path['idx'])
-        # # sample = chunks[song_path['idx']]
-
-        if self.transform:
-            sample = self.transform(sample)
 
 
-        return sample
 
 def song_loader(chunk_info, seq_len, normalize=True):
     """Load the audio chunk

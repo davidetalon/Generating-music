@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 import scipy.io.wavfile
 import soundfile as sf
+import librosa
 
 
 # create the parser
@@ -28,8 +29,10 @@ parser.add_argument('--discr_lr',        type=float, default=1e-4,    help=' Gen
 parser.add_argument('--wgan',            type=int,   default=0,         help='Choose to train with wgan or vanilla-gan')
 parser.add_argument('--disc_updates',    type=int,   default=5,         help='Number of critic updates')
 parser.add_argument('--post_proc',       type=int,   default=1,         help='Choose to apply post processing to generated samples')
+parser.add_argument('--phase_shift',    type=int,   default=2,         help='Choose the phase shuffle shift param')
 parser.add_argument('--attention',       type=int,   default=0,         help='Choose to add attention or not')
 parser.add_argument('--extended_seq',    type=int,   default=0,         help='Choose the seq_len 16384/65536')
+
 
 parser.add_argument('--notes',          type=str, default="Standard model",    help=' Notes on the model')
 
@@ -49,18 +52,18 @@ parser.add_argument('--metrics_dir',          type=str, default='metrics/',    h
 parser.add_argument('--model_path',          type=str, default='',    help='Path to models to restore')
 
 
-def save_models(date, ckp_dir, gen_file_name, disc_file_name):
+def save_models(date, prod_dir, gen_file_name, disc_file_name):
     """Save the model parameters
 
     Args:
         date (String): date for the name of the model to save.
-        ckp_dir (String): directory path where to save files
+        prod_dir (String): directory path where to save files
         gen_file_name (String): generator model name
         disc_file_name (String): discriminator model name
     """
     print("Backing up the discriminator and generator models")
-    torch.save(gen.state_dict(), ckp_dir / gen_file_name)
-    torch.save(disc.state_dict(), ckp_dir / disc_file_name)
+    torch.save(gen.state_dict(), prod_dir / gen_file_name)
+    torch.save(disc.state_dict(), prod_dir / disc_file_name)
 
 def sample_fake(latent, date, epoch, prod_dir):
     """Generate samples from the latent and save them as wav files
@@ -76,11 +79,14 @@ def sample_fake(latent, date, epoch, prod_dir):
         print("Sampling from generator distribution: store samples for inspection.")
         fake = gen(latent).detach().cpu()
         # saving each generated audio independently
+        target_folder = prod_dir/ (date + "_" + str(epoch))
+        target_folder.mkdir(parents=True, exist_ok=True)
         for idx, sample in enumerate(torch.split(fake, 1, dim=0)):
             sample = torch.squeeze(sample)
-            target_path  = prod_dir / (date + "_" + str(epoch) + "_" + str(idx) + ".wav")
+            target_path  = target_folder / (str(idx) + ".wav")
             sample = sample.numpy()
-            sf.write(target_path, sample, 16000, format='WAV')
+            librosa.output.write_wav(target_path, sample, 16000)
+            # sf.write(target_path, sample, 16000, format='WAV')
 
             # torchaudio.save(str(path), fake, 16000)
             # scipy.io.wavfile.write(prod_dir / ("epoch" + str(epoch) + ".wav"), 16000, fake.T )
@@ -135,7 +141,7 @@ if __name__ == '__main__':
     gen = Generative(ng, ngf, extended_seq=extended_seq, latent_dim=args.latent_dim, post_proc=post_proc, attention=args.attention)
     gen.to(device)
     # set up the discriminative models
-    disc = Discriminative(ng, ndf, extended_seq=extended_seq, wgan=args.wgan, attention=args.attention)
+    disc = Discriminative(ng, ndf, extended_seq=extended_seq, wgan=args.wgan, attention=args.attention, phase_shift=args.phase_shift)
     disc.to(device)
 
     # gen.apply(weights_init)
@@ -150,9 +156,11 @@ if __name__ == '__main__':
     trans = None
 
     # test dataloader
-    dataset = MusicDataset("dataset/piano", seq_len=seq_len, normalize=normalize, transform=trans)
+    dataset = MusicDataset("dataset/piano/training", seq_len=seq_len, normalize=normalize, transform=trans)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size)
 
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+    valid_set = MusicDataset("dataset/piano/valid", seq_len=seq_len, normalize=normalize, transform=trans, restart_streams=True)
+    valid_dataloader = DataLoader(valid_set, batch_size=args.batch_size//8)
 
     if args.model_path != '':
         print("Loading the model")
@@ -185,6 +193,14 @@ if __name__ == '__main__':
     if args.wgan:
         gp_history = []
         W_loss_history = []
+        disc_ave_grads_history = []
+        gen_ave_grads_history = []
+
+        valid_disc_loss_history = []
+        valid_D_real_history = []
+        valid_D_fake_history = []
+        valid_gp_history = []
+        valid_W_loss_history = []
     else:
         D_x_history = []
         D_G_z1_history = []
@@ -200,12 +216,24 @@ if __name__ == '__main__':
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if args.save:
-        ckp_dir = Path(args.ckp_dir)
-        ckp_dir.mkdir(parents=True, exist_ok=True)
         prod_dir = Path(args.prod_dir)
         prod_dir.mkdir(parents=True, exist_ok=True)
-        gen_file_name = 'gen_params'+date+'.pth'
-        disc_file_name = 'discr_params'+date+'.pth'
+        prod_dir = prod_dir / str(date)
+        prod_dir.mkdir(parents=True, exist_ok=True)
+        gen_file_name = 'gen_params.pth'
+        disc_file_name = 'discr_params.pth'
+
+    num_batches = (len(dataloader)//args.disc_updates)//args.batch_size
+
+    disc_layers = []
+    for n, p in disc.named_parameters():
+        if(p.requires_grad) and ("bias" not in n):
+            disc_layers.append(n)
+
+    gen_layers = []
+    for n, p in gen.named_parameters():
+        if(p.requires_grad) and ("bias" not in n):
+            gen_layers.append(n)
 
     # replay_memory = torch.empty((args.batch_size, ng, subseq_len), device=device)
     replay_memory = ReplayMemory(capacity=512)
@@ -215,38 +243,65 @@ if __name__ == '__main__':
 
         # Iterate batches
         data_iter = iter(dataloader)
-        epoch_batches = len(data_iter)//(5 if args.wgan>=1 else 1)
+        valid_iter = iter(valid_dataloader)
+        # print(len(data_iter))
+        # epoch_batches = len(data_iter)//(5 if args.wgan>=1 else 1)
         i = -1
-        for i in range(epoch_batches):
+
+        disc_losses = []
+        D_reals =[]
+        D_fakes = []
+        gps = []
+        W_losses = []
+
+        for i in range(num_batches):
 
             
             start = time.time()
 
             if(args.wgan >= 1):
 
-                disc_losses = []
-                D_reals =[]
-                D_fakes = []
-                gps = []
-                W_losses = []
+                # disc_losses = []
+                # D_reals =[]
+                # D_fakes = []
+                # gps = []
+                # W_losses = []
+                for p in disc.parameters():
+                    p.requires_grad = True
 
                 for t in range(args.disc_updates):
                     batch_sample = data_iter.next()
                     batch = batch_sample.to(device)
-                    disc_loss, D_real, D_fake, gp, W_loss, disc_top, disc_bottom = train_disc(gen, disc, batch, 10, disc_optimizer, latent_dim, device)
+                    disc_loss, D_real, D_fake, gp, W_loss, disc_top, disc_bottom, ave_grads = train_disc(gen, disc, batch, 10, disc_optimizer, latent_dim, True, device)
                     disc_losses.append(disc_loss)
                     D_reals.append(D_real)
                     D_fakes.append(D_fake)
                     gps.append(gp)
                     W_losses.append(W_loss)
-                
-                disc_loss = np.mean(np.asarray(disc_losses))
-                D_real = np.mean(np.asarray(D_reals))
-                D_fake = np.mean(np.asarray(D_fakes))
-                gp = np.mean(np.asarray(gps))
-                W_loss = np.mean(np.asarray(W_losses))
+                    disc_ave_grads_history.extend(ave_grads)
+
+                    # evaluate on the validation
+     
+                    valid_batch = valid_iter.next()
+                    valid_batch = valid_batch.to(device)
+                    valid_disc_loss, valid_D_real, valid_D_fake, valid_gp, valid_W_loss, _, _, _ = train_disc(gen, disc, valid_batch, 10, disc_optimizer, latent_dim, False, device)
+                    valid_disc_loss_history.append(valid_disc_loss)
+                    valid_D_real_history.append(valid_D_real)
+                    valid_D_fake_history.append(valid_D_fake)
+                    valid_gp_history.append(valid_gp)
+                    valid_W_loss_history.append(valid_W_loss)
+
+                # disc_loss = np.mean(np.asarray(disc_losses))
+                # D_real = np.mean(np.asarray(D_reals))
+                # D_fake = np.mean(np.asarray(D_fakes))
+                # gp = np.mean(np.asarray(gps))
+                # W_loss = np.mean(np.asarray(W_losses))
+
+                for p in gen.parameters():
+                    p.requires_grad = True
                     
-                gen_loss, gen_top, gen_bottom = train_gen(gen, disc, batch, gen_optimizer, latent_dim, device)
+                gen_loss, gen_top, gen_bottom, ave_grads = train_gen(gen, disc, batch, gen_optimizer, latent_dim, device)
+                gen_ave_grads_history.extend(ave_grads)
 
                 real_loss = fake_loss = 0        
             else:
@@ -256,6 +311,12 @@ if __name__ == '__main__':
                 batch, adversarial_loss, disc_optimizer, gen_optimizer, latent_dim, device, replay_memory)
             
             # train_batch(gen, disc, batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
+
+            disc_loss = np.mean(np.asarray(disc_losses))
+            D_real = np.mean(np.asarray(D_reals))
+            D_fake = np.mean(np.asarray(D_fakes))
+            gp = np.mean(np.asarray(gps))
+            W_loss = np.mean(np.asarray(W_losses))
 
             # saving metrics
             disc_loss_history.append(disc_loss)
@@ -273,7 +334,7 @@ if __name__ == '__main__':
                 gp_history.append(gp)
                 W_loss_history.append(W_loss)
                 end = time.time()
-                print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [W_loss: %f]" % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader)//5, disc_loss, gen_loss, W_loss))
+                # print("[Time %d s][Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [W_loss: %f]" % (end-start, epoch + 1, args.num_epochs, i+1, len(dataloader)//5, disc_loss, gen_loss, W_loss))
             else:
                 D_x_history.append(D_x)
                 D_G_z1_history.append(D_G_z1)
@@ -287,14 +348,15 @@ if __name__ == '__main__':
 
 
         end_epoch = time.time()
-        print("\033[92m Epoch %d completed, time %d s \033[0m" %(epoch + 1, end_epoch - start_epoch))
+        # print("\033[92m Epoch %d completed, time %d s \033[0m" %(epoch + 1, end_epoch - start_epoch))
+        print("[Time %d s][Epoch %d/%d][D loss: %f] [G loss: %f] [W_loss: %f]" % (end_epoch-start_epoch, epoch + 1, args.num_epochs, disc_loss, gen_loss, W_loss))
 
         if args.save and ((epoch+1) % args.save_interleaving == 0):
-            save_models(date, ckp_dir, gen_file_name, disc_file_name)
+            save_models(date, prod_dir, gen_file_name, disc_file_name)
             sample_fake(fixed_noise, date, epoch, prod_dir)
 
     if args.save:
-        save_models(date, ckp_dir, gen_file_name, disc_file_name)
+        save_models(date, prod_dir, gen_file_name, disc_file_name)
         sample_fake(fixed_noise, date, epoch, prod_dir)
 
     #Save all needed parameters
@@ -303,6 +365,8 @@ if __name__ == '__main__':
 
 
     metrics = {'parameters':vars(args),
+                'disc_layers':disc_layers,
+                'gen_layers':gen_layers,
                 'disc_loss':disc_loss_history, 
                 'gen_loss':gen_loss_history, 
                 'D_real': D_real_history,
@@ -310,7 +374,14 @@ if __name__ == '__main__':
                 'gen_top':gen_top_grad, 
                 'gen_bottom':gen_bottom_grad,
                 'discr_top':disc_top_grad,
-                'discr_bottom':disc_bottom_grad}
+                'discr_bottom':disc_bottom_grad,
+                'disc_ave_grads':disc_ave_grads_history,
+                'gen_ave_grads': gen_ave_grads_history,
+                'valid_disc_loss_history': valid_disc_loss_history,
+                'valid_D_real_history': valid_D_real_history,
+                'valid_D_fake_history': valid_D_fake_history,
+                'valid_gp_history': valid_gp_history,
+                'valid_W_loss_history': valid_W_loss_history}
     
     if args.wgan:
         wgan_metrics = {'gp':gp_history,
@@ -327,11 +398,10 @@ if __name__ == '__main__':
   
 
     # Save metrics
-    metrics_dir = Path(args.metrics_dir)
-    metrics_dir.mkdir(parents=True, exist_ok=True)
-    metric_file_name = 'metrics'+ date +'.json'
-    with open(metrics_dir / metric_file_name, 'w') as f:
-        json.dump(metrics, f, indent=4)
-    print("Completed successfully.")
+    if args.save:
+        metric_file_name = 'metrics.json'
+        with open(prod_dir / metric_file_name, 'w') as f:
+            json.dump(metrics, f, indent=4)
+        print("Completed successfully.")
 
 
