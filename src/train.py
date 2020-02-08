@@ -157,6 +157,8 @@ if __name__ == '__main__':
 
     # get the number of batches
     num_batches = (len(dataloader)//args.disc_updates)//args.batch_size
+    if num_batches == 0:
+        raise ValueError("Limited dataset, a discriminator update cycle is not possbile(5xbatch_size samples needed). Try reducing the batch size")
 
     # collect discriminator layers
     disc_layers = []
