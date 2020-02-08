@@ -26,7 +26,7 @@ Here is how you can start model training from the root directory. Set model and 
 bash src/train.sh
 ```
 
-To load a model, move both gen_params.pth and discr_params.pth under the same folder, set it as model folder with `--model_folder`
+To load a model, move both `gen_params.pth` and `discr_params.pth` under the same folder, set it as model folder with `--model_folder`
 
 Explore other parameters with
 ```
