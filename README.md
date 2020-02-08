@@ -1,4 +1,5 @@
-Pytorch implementation of WaveGAN models ([Donahue et al., 2018](https://arxiv.org/pdf/1802.04208.pdf)). Following the approach of SAGAN([Zhang et al., 2018](https://arxiv.org/pdf/1805.08318.pdf)), a pair of attention layers has been added to both the generator and discriminator.Improvement are observed on the long-term structure representation of audio modality.
+Pytorch implementation of WaveGAN models ([Donahue et al., 2018](https://arxiv.org/pdf/1802.04208.pdf)).
+Following the approach of SAGAN([Zhang et al., 2018](https://arxiv.org/pdf/1805.08318.pdf)), a pair of attention layers has been added to both the generator and discriminator. Improvement are observed on the long-term structure representation of audio modality.
 
 ## Requirements
 This code requires following packages which could be installed via `conda` or `pip`:
@@ -18,17 +19,14 @@ Tests has been performed with Bach piano dataset properly encoded with floating 
 
 ## Train the model
 
-Here is how you can start model training from the root directory.
+Here is how you can start model training from the root directory. Set model and training parameters in `train.sh`. In particular you need to specify the dataset directory with '--data_dir=<data_dir>'. Then you can run the code:
 
 ```
 
-bash src/train.sh \ --data_dir=<data_dir>
+bash src/train.sh
 ```
 
-To load a model, move both gen_params.pth and discr_params.pth under the same folder and use it as model_folder
-```
-bash src/train.sh \ --model_folder=<model_folder>
-```
+To load a model, move both gen_params.pth and discr_params.pth under the same folder, set it as model folder with '--model_folder=<model_folder>'
 
 Explore other parameters with
 ```
