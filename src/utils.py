@@ -20,7 +20,7 @@ def save_models(gen, disc, date, prod_dir, gen_file_name, disc_file_name):
     torch.save(gen.state_dict(), prod_dir / gen_file_name)
     torch.save(disc.state_dict(), prod_dir / disc_file_name)
 
-def sample_fake(gen, latent, date, epoch, prod_dir):
+def sample_fake(gen, latent, date, prod_dir, epoch=0):
     """Generate samples from the latent and save them as wav files
 
     Args:

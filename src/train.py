@@ -285,7 +285,7 @@ if __name__ == '__main__':
         # store current metrics, models and samples
         if args.save and ((epoch+1) % args.save_interleaving == 0):
             save_models(gen, disc, date, prod_dir, gen_file_name, disc_file_name)
-            sample_fake(gen, fixed_noise, date, epoch, prod_dir)
+            sample_fake(gen, fixed_noise, date, prod_dir=prod_dir, epoch=epoch)
             collect_and_save(prod_dir,
                             parameters=vars(args),
                             disc_layers=disc_layers,
@@ -315,7 +315,7 @@ if __name__ == '__main__':
     # concluded training, store everything
     if args.save:
         save_models(gen, disc, date, prod_dir, gen_file_name, disc_file_name)
-        sample_fake(gen, fixed_noise, date, epoch, prod_dir)
+        sample_fake(gen, fixed_noise, date, prod_dir=prod_dir)
         collect_and_save(prod_dir,
                         parameters=vars(args),
                         disc_layers=disc_layers,
