@@ -19,14 +19,14 @@ Tests has been performed with Bach piano dataset properly encoded with floating 
 
 ## Train the model
 
-Here is how you can start model training from the root directory. Set model and training parameters in `train.sh`. In particular you need to specify the dataset directory with '--data_dir=<data_dir>'. Then you can run the code:
+Here is how you can start model training from the root directory. Set model and training parameters in `train.sh`. In particular you need to specify the dataset directory with '--data_dir'. Then you can run the code:
 
 ```
 
 bash src/train.sh
 ```
 
-To load a model, move both gen_params.pth and discr_params.pth under the same folder, set it as model folder with '--model_folder=<model_folder>'
+To load a model, move both gen_params.pth and discr_params.pth under the same folder, set it as model folder with '--model_folder'
 
 Explore other parameters with
 ```
