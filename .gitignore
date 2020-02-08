@@ -110,7 +110,7 @@ venv.bak/
 *.code-workspace
 
 # exclude everything from the dataset folder
-dataset/*
+# dataset/*
 # !dataset/.gitkeep 
 
 # exclude everything from the metrics folder
