@@ -111,7 +111,7 @@ venv.bak/
 
 # exclude everything from the dataset folder
 dataset/*
-!dataset/.gitkeep 
+# !dataset/.gitkeep 
 
 # exclude everything from the metrics folder
 metrics/*
