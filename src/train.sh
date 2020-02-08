@@ -7,9 +7,8 @@ python src/train.py \
 --num_epochs=1 \
 --attention=1 \
 --save_interleaving=100 \
---notes='wgan/1e-4/2500/64/att//postproc' \
 --extended_seq=0 \
 --post_proc=1 \
 --phase_shift=2 \
 --data_dir='dataset/piano_f32le' \
---model_folder='models' \
+# --model_folder='models' \
