@@ -1,91 +1,54 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# TODO: check if the testing part is working
+# TODO: Phase shuffle tensor creation device
 from torch import nn
 import numpy as np
 import time
 import torch
 import random
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 
-
-# def plot_grad_flow(named_parameters):
-#     '''Plots the gradients flowing through different layers in the net during training.
-#     Can be used for checking for possible gradient vanishing / exploding problems.
-    
-#     Usage: Plug this function in Trainer class after loss.backwards() as 
-#     "plot_grad_flow(self.model.named_parameters())" to visualize the gradient flow'''
-#     ave_grads = []
-#     max_grads= []
-#     layers = []
-#     for n, p in named_parameters:
-#         if(p.requires_grad) and ("bias" not in n):
-#             layers.append(n)
-#             ave_grads.append(p.grad.abs().mean())
-#             max_grads.append(p.grad.abs().max())
-#     plt.bar(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
-#     plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
-#     plt.hlines(0, 0, len(ave_grads)+1, lw=2, color="k" )
-#     plt.xticks(range(0,len(ave_grads), 1), layers, rotation="vertical")
-#     plt.xlim(left=0, right=len(ave_grads))
-#     plt.ylim(bottom = -0.001, top=0.02) # zoom in on the lower gradient regions
-#     plt.xlabel("Layers")
-#     plt.ylabel("average gradient")
-#     plt.title("Gradient flow")
-#     plt.grid(True)
-#     plt.legend([Line2D([0], [0], color="c", lw=4),
-#                 Line2D([0], [0], color="b", lw=4),
-#                 Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
-#     plt.show()
-
-# def plot_grad_flow(named_parameters):
-#     ave_grads = []
-#     layers = []
-#     for n, p in named_parameters:
-#         if(p.requires_grad) and ("bias" not in n):
-#             layers.append(n)
-#             ave_grads.append(p.grad.abs().mean())
-#     plt.plot(ave_grads, alpha=0.3, color="b")
-#     plt.hlines(0, 0, len(ave_grads)+1, linewidth=1, color="k" )
-#     plt.xticks(range(0,len(ave_grads), 1), layers, rotation="vertical")
-#     plt.xlim(xmin=0, xmax=len(ave_grads))
-#     plt.xlabel("Layers")
-#     plt.ylabel("average gradient")
-#     plt.title("Gradient flow")
-#     plt.grid(True)
-#     plt.show()
 
 class Transpose1dLayer(nn.Module):
+    """Transposed 1D convolution. It applies a fractionally strided convolution.
+
+    Args:
+        in_channels (int): number of channels of the input.
+        out_channels (int): number of channels produced by the convolution.
+        kernel_size (int): size of the convolving kernel.
+        stride (int): Stride of the convolution.
+        upsample (int): Upsample of the data before convolution. Default: 512.
+    """
 
     def __init__(self, in_channels, out_channels, kernel_size, stride, upsample=4):
         super(Transpose1dLayer, self).__init__()
 
         self.upsample = upsample
-
         self.reflection_pad = kernel_size // 2
-        # self.reflection_pad = nn.ConstantPad1d(reflection_pad, value=0)
 
         self.conv1d = torch.nn.Conv1d(in_channels, out_channels, kernel_size, stride)
-        # self.Conv1dTrans = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, padding, output_padding)
+
 
     def forward(self, x):
 
+        # apply nearest neighbour upsampling
         x = torch.nn.functional.interpolate(x, scale_factor=self.upsample, mode='nearest')
 
+        # pad to mantain current shape
         x = torch.nn.functional.pad(x, (self.reflection_pad, self.reflection_pad), mode='constant', value=0)
 
         x = self.conv1d(x)
 
         return x
-        # return self.conv1d(self.reflection_pad(self.upsample_layer(x)))
+
 
 
 class AttentionLayer(nn.Module):
     """Attention layer of the SAGAN model.
 
     Args:
-        in_dim (int): number of channels of the input
+        in_dim (int): number of channels of the input.
     """
 
     def __init__(self, in_dim):
@@ -102,17 +65,21 @@ class AttentionLayer(nn.Module):
     
     def forward(self, x):
 
+        # map on another space
         fxi = self.value_conv(x)
         gxj = self.key_conv(x)
 
+        # compute betas
         sij = torch.bmm(fxi.permute(0,2,1), gxj)
         betas = self.softmax(sij).permute(0,2,1)
 
         hidden = self.query_conv(x)
 
+        # apply attention
         output = torch.bmm(hidden, betas)
         output = self.conv(output)
 
+        # multiply and sum back
         output = self.gamma * output + x
 
         return output
@@ -142,6 +109,8 @@ class ReplayMemory(object):
         split = torch.split(batch, 1, dim=0)
         if len(self.memory) < self.capacity:
             self.memory.append(None)
+        
+        # add the batch to the circular buffer and get the pointer
         self.memory[self.position:self.position+batch.shape[0]] = split
         self.position = (self.position + batch.shape[0]) % self.capacity
 
@@ -154,9 +123,11 @@ class ReplayMemory(object):
         Returns:
             Drawn samples.
         """ 
+
+        # draw random samples
         sampled = random.sample(self.memory, batch_size)
         concatenated = torch.cat(sampled, dim=0)
-        # concatenated = torch.unsqueeze(concatenated, dim=1)
+
         return concatenated
 
 def weights_init(m):
@@ -170,9 +141,6 @@ def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1 or classname.find('Linear') != -1:
         nn.init.kaiming_normal_(m.weight.data)
-    # elif classname.find('BatchNorm') != -1:
-    #     nn.init.normal_(m.weight.data, 1.0, 0.02)
-    #     nn.init.constant_(m.bias.data, 0)
 
 class Generative(nn.Module):
     """Generative model which maps from noise in the latent space to samples in the data space.
@@ -224,7 +192,6 @@ class Generative(nn.Module):
     def forward(self, x):
         x = self.linear(x)
         
-        # x = nn.ReLU()(x)
         if self.extended_seq:
             x = x.view(x.shape[0], 2 * 16 * self.ngf, 16)
         else:
@@ -260,9 +227,9 @@ class Generative(nn.Module):
         x = nn.Tanh()(x)
 
         
-
         if self.post_proc:
 
+            # compute pad so as to mantain same shape
             if (self.post_proc_filter_len % 2) == 0:
                 pad_left = self.post_proc_filter_len // 2
                 pad_right = pad_left - 1
@@ -275,55 +242,7 @@ class Generative(nn.Module):
 
         return x
 
-    
 
-# class Generative(nn.Module):
-#     def __init__(self, ng=1, ngf=64, extended_seq=False, latent_dim=100, post_proc=True, attention=False): 
-#         super(Generative, self).__init__()
-        
-
-#         self.model_size = ngf  # d
-#         self.num_channels = ng  # c
-#         self.latent_di = latent_dim
-#         self.post_proc_filt_len = 512
-#         # "Dense" is the same meaning as fully connection.
-#         self.linear = nn.Linear(latent_dim, 256 * self.model_size)
-
-   
-#         stride = 1
-#         upsample = 4
-#         self.conv1 = Transpose1dLayer(16 * self.model_size, 8 * self.model_size, 25, stride, upsample=upsample)
-#         self.conv2 = Transpose1dLayer(8 * self.model_size, 4 * self.model_size, 25, stride, upsample=upsample)
-#         self.conv3 = Transpose1dLayer(4 * self.model_size, 2 * self.model_size, 25, stride, upsample=upsample)
-#         self.conv4 = Transpose1dLayer(2 * self.model_size, self.model_size, 25, stride, upsample=upsample)
-#         self.conv5 = Transpose1dLayer(self.model_size, ng, 25, stride, upsample=upsample)
-
-#         # if self.post_proc_filt_len:
-#         #     self.ppfilter1 = nn.Conv1d(ng, ng, self.post_proc_filt_len)
-
-#         for m in self.modules():
-#             if isinstance(m, nn.ConvTranspose1d) or isinstance(m, nn.Linear):
-#                 nn.init.kaiming_normal_(m.weight.data)
-
-#     def forward(self, x):
-#         x = self.linear(x).view(-1, 16 * self.model_size, 16)
-#         x = torch.relu(x)
-
-
-#         x = torch.relu(self.conv1(x))
-      
-
-#         x = torch.relu(self.conv2(x))
-
-
-#         x = torch.relu(self.conv3(x))
-
-
-#         x = torch.relu(self.conv4(x))
-
-
-#         output = torch.tanh(self.conv5(x))
-#         return output
 
 class PhaseShuffle(nn.Module):
     """Phase Shuffle layer as described by https://arxiv.org/pdf/1802.04208.pdf
@@ -337,67 +256,43 @@ class PhaseShuffle(nn.Module):
         super(PhaseShuffle, self).__init__()
         self.shift_factor = shift_factor
 
+
     def forward(self, x):
-
+        
         seq_len = x.shape[-1]
-        random_shift = torch.randint(low = -self.shift_factor, high= self.shift_factor, size=(x.shape[0],))
-  
-        abs_shift = torch.abs(random_shift)
 
-        shifted_batch = torch.empty(x.size())
+        # get the random shift
+        random_shift = torch.randint(low = -self.shift_factor, high= self.shift_factor + 1, size=(x.shape[0],), device=x.device)
+        abs_shift = torch.abs(random_shift)
+        
+
+        shifted_batch = []
         for idx, sample in enumerate(torch.split(x, 1, dim=0)):
 
             current_shift = abs_shift[idx]
-            # sample = torch.unsqueeze(sample, dim=0)
- 
+
             if (abs_shift[idx] == 0):
+                
                 shifted = sample
             elif (abs_shift[idx] > 0):
-                # shifted = torch.empty(sample.size(), device=torch.device("cuda"))
+
+                # circular shift: pad circularly and get needed part
                 padded = torch.nn.functional.pad(sample, (current_shift, 0), mode='circular')
                 shifted = torch.narrow(padded, dim=-1, start=0, length=seq_len)
             else:
+
+                # circular shift: pad circularly and get needed part
                 padded = torch.nn.functional.pad(sample, (0, current_shift), mode='circular')
                 shifted = torch.narrow(padded, dim=-1, start=x.shape[-1] - seq_len, length=seq_len)
  
-            shifted_batch[idx] = shifted
+            
+            shifted_batch.append(shifted)
 
-        # # x = torch.cat(shifted_batch, dim=0)
-        # x = shifted_batch
+        # gather the batch
+        x = torch.cat(shifted_batch, dim=0)
 
         return x
-
-    # def forward(self, x):
-    #     if self.shift_factor == 0:
-    #         return x
-    #     # uniform in (L, R)
-    #     k_list = torch.Tensor(x.shape[0]).random_(0, 2 * self.shift_factor + 1) - self.shift_factor
-    #     k_list = k_list.numpy().astype(int)
-
-    #     # Combine sample indices into lists so that less shuffle operations
-    #     # need to be performed
-    #     k_map = {}
-    #     for idx, k in enumerate(k_list):
-    #         k = int(k)
-    #         if k not in k_map:
-    #             k_map[k] = []
-    #         k_map[k].append(idx)
-
-    #     # Make a copy of x for our output
-    #     x_shuffle = x.clone()
-
-    #     # Apply shuffle to each sample
-    #     for k, idxs in k_map.items():
-    #         if k > 0:
-    #             x_shuffle[idxs] = torch.nn.functional.pad(x[idxs][..., :-k], (k, 0), mode='reflect')
-    #         else:
-    #             x_shuffle[idxs] = torch.nn.functional.pad(x[idxs][..., -k:], (0, -k), mode='reflect')
-
-    #     assert x_shuffle.shape == x.shape, "{}, {}".format(x_shuffle.shape,
-    #                                                    x.shape)
-    #     return x_shuffle
-
-        
+       
 
 class Discriminative(nn.Module):
     """Discriminative model of the gan: could act as critic or catch fake samples depending on the training algorithm.
@@ -408,6 +303,7 @@ class Discriminative(nn.Module):
         extended_seq (bool): extended_seq (bool): set if extended sequences are required. Default: ``False``.
         wgan (bool): set if wgan is used as training algorithm. Default: ``False``.
         attention (bool): set if apply attention. Default: ``False``.
+        phase_shift (int): choose the maximum circular shift possible. Default: 2.
     """
 
     def __init__(self, ng=1, ndf=64, extended_seq=False, wgan=False, attention=False, phase_shift=2):
@@ -429,8 +325,8 @@ class Discriminative(nn.Module):
 
         self.linear = nn.Linear(ndf*(512 if self.extended_seq else 256), 1)
 
-        # if self.extended_seq:
-        #     self.extra_layer = nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True)
+        if self.extended_seq:
+            self.extra_layer = nn.Conv1d(ndf * 16, ndf*32, 25, 4, 11, bias=True)
 
         if self.attention:
             self.att1 = AttentionLayer(ndf * 4) 
@@ -480,60 +376,6 @@ class Discriminative(nn.Module):
 
         return x
 
-# class Discriminative(nn.Module):
-#     def __init__(self, num_channels=1, model_size=64, extended_seq=False, wgan=False, attention=False, phase_shift=2):
-#         super(Discriminative, self).__init__()
-#         shift_factor = 2
-#         self.model_size = model_size  # d
-#         self.num_channels = num_channels  # c
-#         self.shift_factor = phase_shift  # n
-#         self.alpha = 0.2
-
-#         self.conv1 = nn.Conv1d(num_channels, model_size, 25, stride=4, padding=11)
-#         self.conv2 = nn.Conv1d(model_size, 2 * model_size, 25, stride=4, padding=11)
-#         self.conv3 = nn.Conv1d(2 * model_size, 4 * model_size, 25, stride=4, padding=11)
-#         self.conv4 = nn.Conv1d(4 * model_size, 8 * model_size, 25, stride=4, padding=11)
-#         self.conv5 = nn.Conv1d(8 * model_size, 16 * model_size, 25, stride=4, padding=11)
-
-#         self.ps1 = PhaseShuffle(self.shift_factor)
-#         self.ps2 = PhaseShuffle(self.shift_factor)
-#         self.ps3 = PhaseShuffle(self.shift_factor)
-#         self.ps4 = PhaseShuffle(self.shift_factor)
-
-#         self.linear = nn.Linear(256 * model_size, 1)
-
-#         for m in self.modules():
-#             if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
-#                 nn.init.kaiming_normal_(m.weight.data)
-
-#     def forward(self, x):
-#         x = nn.functional.leaky_relu(self.conv1(x), negative_slope=self.alpha)
-
-#         x = self.ps1(x)
-
-#         x = nn.functional.leaky_relu(self.conv2(x), negative_slope=self.alpha)
-
-#         x = self.ps2(x)
-
-#         x = nn.functional.leaky_relu(self.conv3(x), negative_slope=self.alpha)
-
-#         x = self.ps3(x)
-
-#         x = nn.functional.leaky_relu(self.conv4(x), negative_slope=self.alpha)
-
-#         x = self.ps4(x)
-
-#         x = nn.functional.leaky_relu(self.conv5(x), negative_slope=self.alpha)
-
-
-#         x = x.view(-1, 256 * self.model_size)
-
-
-#         return self.linear(x)
-        
-
-
-
 def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent_dim, device, replay_memory):
     """Train the models as a vanilla GAN.
 
@@ -563,15 +405,8 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent
 
     """
 
-    
-    # (batch_size, channel, seq_len)
-
-    # batch = torch.transpose(batch, 0, 1)
-    # batch = torch.transpose(batch, 1, 2)
-
     batch_size = batch.shape[0]
-    # # print(target_real_data.shape)
-    
+
     # ############################
     # # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
     # ###########################
@@ -591,36 +426,40 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent
     fake = torch.where(random <= 0.05, noisy, fake)
 
 
-    # computing the loss
+    # computing the loss on the real data
     output = disc(batch)
     real_loss = loss_fn(output, real)
     D_x = output.mean().item()
-    start = time.time()
+    # backprop
     real_loss.backward()
-    end = time.time()
 
+    
+    # generate a fake batch
     rnd_assgn = torch.randn((batch_size, 1, latent_dim), device=device)
     fake_batch = gen(rnd_assgn)
 
 
-    # adding to replay memory and then sample from it
+    # add the fake batch to the replay memory and then sample from it
     replay_memory.push(fake_batch.detach())
     experience = replay_memory.sample(batch_size)
-    # experience = fake_batch.detach()
+    experience = fake_batch.detach()
 
-
+    # compute the loss on the fake batch
     output = disc(experience)
     fake_loss = loss_fn(output, fake)
-    start = time.time()
-    fake_loss.backward()
-    end = time.time()
     D_G_z1 = output.mean().item()
+    # backprop
+    fake_loss.backward()
 
-    disc_top = disc.main[0].weight.grad.norm()
-    disc_bottom = disc.main[-1].weight.grad.norm()
+    
+    # get top and bottom layers grads
+    disc_top = disc.conv1.weight.grad.norm()
+    disc_bottom = disc.linear.weight.norm()
 
+    # get the total loss
     disc_loss = (real_loss + fake_loss)/2
 
+    # update params
     disc_optimizer.step()
 
  
@@ -630,16 +469,18 @@ def train_batch(gen, disc, batch, loss_fn, disc_optimizer, gen_optimizer, latent
     gen_optimizer.zero_grad()
 
 
+    # compute the generator loss on the fake batch
     output = disc(fake_batch)
     gen_loss = loss_fn(output, real)
-
-
     D_G_z2 = output.mean().item()
+    # backprop
     gen_loss.backward()
 
+    # get top and bottom layers grads
     gen_top = gen.linear.weight.grad.norm()
-    gen_bottom = gen.main[-2].weight.grad.norm()
+    gen_bottom = gen.conv5.conv1d.weight.grad.norm()
 
+    # update params
     gen_optimizer.step()
 
     return gen_loss.item(), real_loss.item(), fake_loss.item(), disc_loss.item(), D_x, D_G_z1, D_G_z2, disc_top.item(), disc_bottom.item(), gen_top.item(), gen_bottom.item()
@@ -654,6 +495,7 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, requires_gra
         lmbda (int): lambda parameter to weight the gradient penaly.
         disc_optimizer (Optimizer): optimizer of the critic.
         latent_dim (int): number of channels of the latent space.
+        requires_grad (bool): set if backpropagation is needed.
         device (torch.device): device where to store tensors.
     
     Returns:
@@ -661,10 +503,11 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, requires_gra
         D_real: critic of the data sampled batch.
         D_fake: critic of the fake generated batch.
         gp: gradient penalty.
+        W_loss: Wasserstain loss between data and learnt distribution.
         disc_top: absolute value of the gradient at the top level of the discriminator.
         disc_bottom: absolute value of the gradient at the bottom level of the discriminator.
+        ave_grads: average gradients of discriminator layers.
     """
-
 
     ############################
     # (2) Update D network
@@ -687,7 +530,6 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, requires_gra
 
     # computing the batch
     fake_batch = gen(rnd_assgn)
-    # print(fake_batch.requires_grad)
     
     # computing the critic of real samples
     D_real = disc(batch)
@@ -701,10 +543,7 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, requires_gra
     if requires_grad:
         D_fake.backward(one)
 
-    
-    
-
-    # computing the gp loss
+    # computing the gp penalty
     interpolation = epsilon * batch.detach() + (1-epsilon) * fake_batch.detach()
     interpolation.requires_grad_(True)
     D_interpolation = disc(interpolation)
@@ -713,41 +552,31 @@ def train_disc(gen, disc, batch, lmbda, disc_optimizer, latent_dim, requires_gra
                               create_graph=True, retain_graph=True, only_inputs=True)[0]
     
     gradients = gradients.view(gradients.size(0),  -1)
-    # gradient_norm = gradients.norm(2, dim=1)
-    # gp = ((gradient_norm - 1)**2)
-    # gp = lmbda * gp.mean()
+
     gp = lmbda * ((gradients.norm(2, dim=1) - 1) ** 2).mean()
     if requires_grad:
         gp.backward(one)
 
-    # print("disc grad: ", disc.conv1.weight.grad.norm().item())
-
+    # compute the losses
     loss = D_fake - D_real + gp
     W_loss = D_real - D_fake
 
+    # gather average gradients information
     ave_grads = []
     if requires_grad:
         for n, p in disc.named_parameters():
             if(p.requires_grad) and ("bias" not in n):
                 ave_grads.append(p.grad.abs().mean().item())
 
-    # print("D_real:", D_real.item()," D_fake:", D_fake.item(), " D_wass:", W_loss.item())
-    # loss.backward()
-
-    # gathering the loss and updating
-    # plot_grad_flow(disc.named_parameters())
+    # update params
     if requires_grad:
         disc_optimizer.step()
         
-    
-    # disc_top = disc.main[0].weight.grad.norm()
-    # disc_bottom = disc.main[-1].weight.grad.norm()
+    # get top and bottom layers grads
     disc_top = disc.conv1.weight.grad.norm()
     disc_bottom = disc.linear.weight.norm()
 
     return loss.item(), D_real.item(), D_fake.item(), gp.item(), W_loss.item(), disc_top.item(), disc_bottom.item(), ave_grads
-
-
 
     
 def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
@@ -762,96 +591,76 @@ def train_gen(gen, disc, batch, gen_optimizer, latent_dim, device):
         device (torch.device): device where to store tensors.
     
     Returns:
-        G_loss: loss of the generator model
+        G_loss: loss of the generator model.
         gen_top: absolute value of the gradient at the top level of the generator.
         gen_bottom: absolute value of the gradient at the bottom level of the generator.
+        ave_grads: average gradients of discriminator layers.
     """
 
-    # for p in disc.parameters():
-    #     p.requires_grad = False
-
-    # for p in gen.parameters():
-    #     p.requires_grad = True
-
-    # zero the gradient
     gen.zero_grad()
 
     batch_size = batch.shape[0]
     batch.requires_grad_(False)
 
     n_ones = -1 * torch.tensor(1, dtype=torch.float, device=device)
+    
     # sampling a batch of latent variables
     rnd_assgn = torch.empty((batch_size,1, latent_dim), device=device).uniform_(-1, 1)
     fake_batch = gen(rnd_assgn)
 
-    # computing the critic
+    # computing the critic on the fake batch
     G = disc(fake_batch)
     G = G.mean()
 
     G.backward(n_ones)
     G_loss = -G
 
+    # gather average gradients information
     ave_grads = []
     for n, p in gen.named_parameters():
         if(p.requires_grad) and ("bias" not in n):
             ave_grads.append(p.grad.abs().mean().item())
 
-    # print("Gen grad: ", gen.linear.weight.grad.norm().item())
-    # plot_grad_flow(gen.named_parameters())
+    # update params
     gen_optimizer.step()
 
-    # gen_top = gen.linear.weight.grad.norm()
+    # get top and bottom layers grads
     gen_top = gen.linear.weight.grad.norm()
     gen_bottom = gen.conv5.conv1d.weight.grad.norm()
     
-    # gen_bottom = gen.main[-2].weight.grad.norm()
 
     return G_loss.item(), gen_top.item(), gen_bottom.item(), ave_grads
     
-
 if __name__=='__main__':
 
-    from dataset import MusicDataset, ToTensor, collate, ToMulaw, OneHotEncoding
+    from dataset import MusicDataset
     from torch.utils.data import Dataset, DataLoader
     import torch
-    from torchvision import transforms
 
     # generative model params
     nz = 1
-    ngf = 16
+    ngf = 64
 
     # discriminative model params
-    ng = 256
+    ng = 1
     ndf = 64
 
     # Check device
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
   
     # set up the generator network
-    gen = Generative(nz, ng, ngf)
+    gen = Generative(ng, ngf, extended_seq=False, latent_dim=100, post_proc=False, attention=False)
     gen.to(device)
-    # set up the discriminative models
-    disc = Discriminative(ng, ndf)
+    # set up the discriminative model
+    disc = Discriminative(ng, ndf, extended_seq=False, wgan=False, attention=False, phase_shift=2)
     disc.to(device)
 
 
-    seq_len = 16000 * 5
+    seq_len = 16384
     normalize = True
-    # trans = ToMulaw()
-
-    # subseq_len = 65536
-    trans = transforms.Compose([ToMulaw(),
-                                OneHotEncoding()
-                                ])
-
     
-    # load data
-    dataset = MusicDataset("/Users/davidetalon/Desktop/Dev/Generating-music/dataset/maestro_mono",
-                                                        seq_len = seq_len,
-                                                        normalize = normalize,
-                                                        transform=trans)
-                        
-    dataloader = DataLoader(dataset, batch_size=5, collate_fn=collate(), shuffle=True)
+    dataset = MusicDataset("dataset/piano_f32le/training", seq_len=seq_len, hop=seq_len/2, normalize=normalize, transform=None)
+    dataloader = DataLoader(dataset, batch_size=10)
 
     # test training
     gen_optimizer = torch.optim.Adam(gen.parameters())
@@ -865,7 +674,10 @@ if __name__=='__main__':
     for i, batch_sample in enumerate(dataloader):
 
         batch = batch_sample.to(device)
-        gen_loss, real_loss, fake_loss, discr_loss, D_x, D_G_z1, D_G_z2, discr_top, discr_bottom, gen_top, gen_bottom = train_batch(gen, disc, batch, adversarial_loss, disc_optimizer, gen_optimizer, device, replay_memory)
+        gen_loss, D_real, D_fake, disc_loss, D_x, D_G_z1, D_G_z2, disc_top, disc_bottom, gen_top, gen_bottom = train_batch(gen, disc, \
+                batch, adversarial_loss, disc_optimizer, gen_optimizer, 100, device, replay_memory)
+        disc_loss, D_real, D_fake, gp, W_loss, disc_top, disc_bottom, ave_grads = train_disc(gen, disc, batch, 10, disc_optimizer, 100, True, device)
+        gen_loss, gen_top, gen_bottom, ave_grads = train_gen(gen, disc, batch, gen_optimizer, 100, device)
 
         if i == 3:
             break
