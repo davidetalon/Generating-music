@@ -5,6 +5,12 @@ Following the approach of SAGAN([Zhang et al., 2018](https://arxiv.org/pdf/1805.
 
 Generated samples are available on [SoundCloud](https://soundcloud.com/davidetalon/sets/raw-audio-generation).
 
+## Download
+Download the latest snapshot via:
+```
+git clone --depth=1 <repo_url>
+```
+
 ## Requirements
 This code requires following packages which could be installed via `conda` or `pip`:
 
